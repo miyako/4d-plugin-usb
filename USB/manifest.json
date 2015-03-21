@@ -1,0 +1,1 @@
+﻿{"name":"USB","id":20000,"commands":[{"theme":"Device","syntax":"USB DEVICE LIST(&Y;&Y;&Y;&Y)"},{"theme":"Device","syntax":"USB DEVICE Open(&L;&L;&L):L"},{"theme":"Device","syntax":"USB DEVICE CLOSE(&L)"},{"theme":"I/O","syntax":"USB Write data(&L;&L;&O;&L):L"},{"theme":"I/O","syntax":"USB Read data(&L;&L;&O;&L;&L):L"}]}
