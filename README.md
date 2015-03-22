@@ -1,5 +1,5 @@
 # 4d-plugin-usb
-Basic implementation (bulk -in/out) of LIBUSB
+Basic implementation (bulk in/out) of LIBUSB
 
 Example
 ---
