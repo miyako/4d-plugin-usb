@@ -37,7 +37,7 @@ End for
   //http://steventsnyder.com/reading-a-dymo-usb-scale-using-python/
 
 $vendorId:=0x0922
-$productId:=0x8003
+$productId:=0x8009
 $interface:=0
 
 $usbId:=USB DEVICE Open ($vendorId;$productId;$interface)
@@ -47,7 +47,7 @@ C_BLOB($data)
 If ($usbId#0)
 
   $endpoint:=0
-  $maxLength:=6
+  $maxLength:=8
   $timeout:=1000  //milliseconds
 
   $receivedLength:=USB Read data ($usbId;$endpoint;$data;$maxLength;$timeout)
