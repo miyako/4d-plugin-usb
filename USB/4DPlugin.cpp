@@ -112,104 +112,102 @@ void USB_DEVICE_LIST(sLONG_PTR *pResult, PackagePtr pParams)
                 Param2.appendIntValue((int)desc.idProduct);
 
                 libusb_config_descriptor *config;
-                libusb_get_config_descriptor(dev, 0, &config);
-                Param3.appendIntValue(config->bNumInterfaces);
-
                 const libusb_interface *inter;
                 const libusb_interface_descriptor *interdesc;
                 const libusb_endpoint_descriptor *epdesc;
-
-                endpoint  = (const uint8_t *)"{\n";
+                                
+                if(!libusb_get_config_descriptor(dev, 0, &config)){
                 
-                _addIntProperty(endpoint, "NumInterfaces", config->bNumInterfaces);
-                endpoint += (const uint8_t *)",\n";  
-                endpoint += (const uint8_t *)"\"Interfaces\":["; 
-                
-                for(int j = 0; j < (int)config->bNumInterfaces; ++j){
+                    Param3.appendIntValue(config->bNumInterfaces);
+                    
+                    endpoint  = (const uint8_t *)"{\n";
+                    _addIntProperty(endpoint, "NumInterfaces", config->bNumInterfaces);
+                    endpoint += (const uint8_t *)",\n";  
+                    endpoint += (const uint8_t *)"\"Interfaces\":["; 
+                    
+                    for(int j = 0; j < (int)config->bNumInterfaces; ++j){
 
-                    inter = &config->interface[j];
-                    
-                    if(j){
-                        endpoint += (const uint8_t *)",\n\t"; 
-                    }
-                    
-                    endpoint += (const uint8_t *)"{\n\t";
+                        inter = &config->interface[j];
                         
-                    _addIntProperty(endpoint, "NumSettings", inter->num_altsetting);
-                    endpoint += (const uint8_t *)",\n\t";  
-                    endpoint += (const uint8_t *)"\"Settings\":["; 
-                    
-                    for(int k = 0; k < inter->num_altsetting; ++k){
-                    
-                        interdesc = &inter->altsetting[k]; 
-                        
-                        if(k){
-                            endpoint += (const uint8_t *)",\n\t\t"; 
+                        if(j){
+                            endpoint += (const uint8_t *)",\n\t"; 
                         }
                         
-                        endpoint += (const uint8_t *)"{\n\t\t";
-                        
-                        _addIntProperty(endpoint, "NumEndpoints", interdesc->bNumEndpoints); 
-                        endpoint += (const uint8_t *)",\n\t\t"; 
-                        
-                        endpoint += (const uint8_t *)"\"Endpoints\":["; 
-                        for(int l = 0; l < (int)interdesc->bNumEndpoints; ++l){ 
-                           
-                            epdesc = &interdesc->endpoint[l];    
+                        endpoint += (const uint8_t *)"{\n\t";
                             
-                            if(l){
-                                endpoint += (const uint8_t *)",\n\t\t\t"; 
-                            }                        
+                        _addIntProperty(endpoint, "NumSettings", inter->num_altsetting);
+                        endpoint += (const uint8_t *)",\n\t";  
+                        endpoint += (const uint8_t *)"\"Settings\":["; 
+                        
+                        for(int k = 0; k < inter->num_altsetting; ++k){
+                        
+                            interdesc = &inter->altsetting[k]; 
+                            
+                            if(k){
+                                endpoint += (const uint8_t *)",\n\t\t"; 
+                            }
+                            
+                            endpoint += (const uint8_t *)"{\n\t\t";
+                            
+                            _addIntProperty(endpoint, "NumEndpoints", interdesc->bNumEndpoints); 
+                            endpoint += (const uint8_t *)",\n\t\t"; 
+                            
+                            endpoint += (const uint8_t *)"\"Endpoints\":["; 
+                            for(int l = 0; l < (int)interdesc->bNumEndpoints; ++l){ 
+                               
+                                epdesc = &interdesc->endpoint[l];    
                                 
-                            endpoint += (const uint8_t *)"{\n\t\t\t"; 
-                              
-                            _addIntProperty(endpoint, "Length", epdesc->bLength); 
-                            endpoint += (const uint8_t *)",\n\t\t\t"; 
-                            
-                            _addIntProperty(endpoint, "DescriptorType", epdesc->bDescriptorType); 
-                            endpoint += (const uint8_t *)",\n\t\t\t"; 
-                            
-                            _addIntProperty(endpoint, "EndpointAddress", epdesc->bEndpointAddress); 
-                            endpoint += (const uint8_t *)",\n\t\t\t"; 
-                            
-                            _addIntProperty(endpoint, "Attributes", epdesc->bmAttributes); 
-                            endpoint += (const uint8_t *)",\n\t\t\t"; 
-                            
-                            _addIntProperty(endpoint, "MaxPacketSize", epdesc->wMaxPacketSize); 
-                            endpoint += (const uint8_t *)",\n\t\t\t"; 
-                            
-                            _addIntProperty(endpoint, "Interval", epdesc->bInterval); 
-                            endpoint += (const uint8_t *)",\n\t\t\t"; 
-                            
-                            _addIntProperty(endpoint, "Refresh", epdesc->bRefresh); 
-                            endpoint += (const uint8_t *)",\n\t\t\t";     
-                            
-                            _addIntProperty(endpoint, "SynchAddress", epdesc->bSynchAddress); 
-
-                            /* 
-                            endpoint += (const uint8_t *)",";     
-                            endpoint += (const uint8_t *)"\"extra\":\"";
-                            endpoint += CUTF8String((const uint8_t *)epdesc->extra, epdesc->extra_length);
-                            endpoint += (const uint8_t *)"\""; 
-                            */
-                                   
-                            endpoint += (const uint8_t *)"\n\t\t\t}";         
-                        }//interdesc->bNumEndpoints 
-                        endpoint += (const uint8_t *)"]";   
-                         
-                        endpoint += (const uint8_t *)"\n\t\t}";                                                    
-                    }//inter->num_altsetting
-                    endpoint += (const uint8_t *)"]";  
-                         
-                    endpoint += (const uint8_t *)"\n\t}";      
-                }//config->bNumInterfaces
-                
-                endpoint += (const uint8_t *)"]"; 
-                endpoint += (const uint8_t *)"\n}";
-                
-                Param4.appendUTF8String(&endpoint);
-                
-                libusb_free_config_descriptor(config); 
+                                if(l){
+                                    endpoint += (const uint8_t *)",\n\t\t\t"; 
+                                }                        
+                                    
+                                endpoint += (const uint8_t *)"{\n\t\t\t"; 
+                                  
+                                _addIntProperty(endpoint, "Length", epdesc->bLength); 
+                                endpoint += (const uint8_t *)",\n\t\t\t"; 
+                                
+                                _addIntProperty(endpoint, "DescriptorType", epdesc->bDescriptorType); 
+                                endpoint += (const uint8_t *)",\n\t\t\t"; 
+                                
+                                _addIntProperty(endpoint, "EndpointAddress", epdesc->bEndpointAddress); 
+                                endpoint += (const uint8_t *)",\n\t\t\t"; 
+                                
+                                _addIntProperty(endpoint, "Attributes", epdesc->bmAttributes); 
+                                endpoint += (const uint8_t *)",\n\t\t\t"; 
+                                
+                                _addIntProperty(endpoint, "MaxPacketSize", epdesc->wMaxPacketSize); 
+                                endpoint += (const uint8_t *)",\n\t\t\t"; 
+                                
+                                _addIntProperty(endpoint, "Interval", epdesc->bInterval); 
+                                endpoint += (const uint8_t *)",\n\t\t\t"; 
+                                
+                                _addIntProperty(endpoint, "Refresh", epdesc->bRefresh); 
+                                endpoint += (const uint8_t *)",\n\t\t\t";     
+                                
+                                _addIntProperty(endpoint, "SynchAddress", epdesc->bSynchAddress); 
+                                       
+                                endpoint += (const uint8_t *)"\n\t\t\t}";         
+                            }//interdesc->bNumEndpoints 
+                            endpoint += (const uint8_t *)"]";   
+                             
+                            endpoint += (const uint8_t *)"\n\t\t}";                                                    
+                        }//inter->num_altsetting
+                        endpoint += (const uint8_t *)"]";  
+                             
+                        endpoint += (const uint8_t *)"\n\t}";      
+                    }//config->bNumInterfaces
+                    
+                    endpoint += (const uint8_t *)"]"; 
+                    endpoint += (const uint8_t *)"\n}";
+                    
+                    libusb_free_config_descriptor(config);
+                                    
+                }else{
+                    //can happen on windows
+                    Param3.appendIntValue(0);
+					endpoint = (const uint8_t *)"{\n\"NumInterfaces\":0,\n\"Interfaces\":[]\n}";
+                }
+                Param4.appendUTF8String(&endpoint);  
             }
         }
     
