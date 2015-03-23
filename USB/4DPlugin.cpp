@@ -386,7 +386,7 @@ bool DeviceOpen(C_LONGINT &index, C_LONGINT &vid, C_LONGINT &pid, C_LONGINT &int
             pid.getIntValue());
                 
                 if(dev_handle){
-                
+                                    
                     bool available = false;
                     
                     if(libusb_kernel_driver_active(dev_handle, interface) == 1){ 
@@ -399,9 +399,10 @@ bool DeviceOpen(C_LONGINT &index, C_LONGINT &vid, C_LONGINT &pid, C_LONGINT &int
                         available = true;
                     }
                 
-                    if(available){
+                    if(available){   
                     
-                        if(!libusb_claim_interface(dev_handle, interface)){
+                        libusb_claim_interface(dev_handle, interface);
+                     //   if(!libusb_claim_interface(dev_handle, interface)){
                         
                             USB_T *usb = new USB_T;
                             usb->dev = dev_handle;
@@ -415,7 +416,7 @@ bool DeviceOpen(C_LONGINT &index, C_LONGINT &vid, C_LONGINT &pid, C_LONGINT &int
                             _devices.insert(std::map<uint32_t, USB_T*>::value_type(i, usb));
                             index.setIntValue(i);
                             return true;
-                        }
+                    //    }
                         
                     }
                     
