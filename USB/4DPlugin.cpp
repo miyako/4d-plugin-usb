@@ -378,51 +378,49 @@ bool DeviceOpen(C_LONGINT &index, C_LONGINT &vid, C_LONGINT &pid, C_LONGINT &int
     if(LIBUSB_READY){
 
         int interface = interfaceid.getIntValue();
-        libusb_device **devs;
-        if(libusb_get_device_list(LIBUSB_CTX, &devs)){
-            libusb_device_handle *dev_handle = libusb_open_device_with_vid_pid(
+        
+        libusb_device_handle *dev_handle = libusb_open_device_with_vid_pid(
             LIBUSB_CTX, 
             vid.getIntValue(), 
             pid.getIntValue());
-                
-                if(dev_handle){
-                                    
-                    bool available = false;
-                    
-                    if(libusb_kernel_driver_active(dev_handle, interface) == 1){ 
-                        // find out if kernel driver is attached
-                        if(libusb_detach_kernel_driver(dev_handle, interface) == 0){
-                            // detach it
-                            available = true;
-                        }
-                    }else{
-                        available = true;
-                    }
-                
-                    if(available){   
-                    
-                        libusb_claim_interface(dev_handle, interface);
-                     //   if(!libusb_claim_interface(dev_handle, interface)){
-                        
-                            USB_T *usb = new USB_T;
-                            usb->dev = dev_handle;
-                            usb->interface_number = interface;
-                            
-                            unsigned int i = 1;
             
-                            while(_devices.find(i) != _devices.end()){
-                                i++;
-                            }
-                            _devices.insert(std::map<uint32_t, USB_T*>::value_type(i, usb));
-                            index.setIntValue(i);
-                            return true;
-                    //    }
-                        
-                    }
-                    
+        if(dev_handle){
+                            
+            bool available = false;
+            
+            if(libusb_kernel_driver_active(dev_handle, interface) == 1){ 
+                // find out if kernel driver is attached
+                if(libusb_detach_kernel_driver(dev_handle, interface) == 0){
+                    // detach it
+                    available = true;
                 }
-
-            libusb_free_device_list(devs, 1); //free the list, unref the devices in it
+            }else{
+                available = true;
+            }
+        
+            if(available){   
+            
+                libusb_claim_interface(dev_handle, interface);
+             //   if(!libusb_claim_interface(dev_handle, interface)){
+                
+                    USB_T *usb = new USB_T;
+                    usb->dev = dev_handle;
+                    usb->interface_number = interface;
+                    
+                    unsigned int i = 1;
+    
+                    while(_devices.find(i) != _devices.end()){
+                        i++;
+                    }
+                    _devices.insert(std::map<uint32_t, USB_T*>::value_type(i, usb));
+                    index.setIntValue(i);
+                    return true;
+            //    }
+                
+            }else{
+                libusb_close(dev_handle);    
+            }
+            
         }
 
     } 
