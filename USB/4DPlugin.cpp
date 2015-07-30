@@ -338,25 +338,20 @@ void USB_Read_data(sLONG_PTR *pResult, PackagePtr pParams)
 
 #pragma mark Init/Deinit
 
-process_name_t ON_EXIT_METHOD_PROCESS_NAME;
-C_TEXT ON_EXIT_METHOD_PROCESS_NAME_INTERNAL;
-
 void OnInitPlugin(){
     if(!libusb_init(&LIBUSB_CTX)){
         LIBUSB_READY = true;
         libusb_set_debug(LIBUSB_CTX, 3); //set verbosity level to 3, as suggested in the documentation
     }
-    
-    CUTF8String on_exit_name((const uint8_t *)"$xx");    
-    ON_EXIT_METHOD_PROCESS_NAME_INTERNAL.setUTF8String(&on_exit_name);
-    ON_EXIT_METHOD_PROCESS_NAME = (process_name_t)ON_EXIT_METHOD_PROCESS_NAME_INTERNAL.getUTF16StringPtr();
 }
 
 bool IsProcessOnExit(){    
     C_TEXT name;
     PA_long32 state, time;
     PA_GetProcessInfo(PA_GetCurrentProcessNumber(), name, &state, &time);
-    return (0 == PA_CompareUnichars((PA_Unichar *)name.getUTF16StringPtr(), ON_EXIT_METHOD_PROCESS_NAME, 1, 0));
+    CUTF16String procName(name.getUTF16StringPtr());
+    CUTF16String exitProcName((PA_Unichar *)"$\0x\0x\0");
+    return (!procName.compare(exitProcName));
 }
 
 void OnCloseProcess(){
