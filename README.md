@@ -109,7 +109,7 @@ USB CLOSE ($deviceHandleRef)
 End for 
 ```
 
-**Note***: Apparently you can't claim most HID devices on Mac, unless you fiddle with kext (kernel extensions).
+**Note**: Apparently you can't claim most HID devices on Mac, unless you fiddle with kext (kernel extensions).
 
 [https://github.com/libusb/libusb/wiki/FAQ](https://github.com/libusb/libusb/wiki/FAQ)
 
