@@ -46,7 +46,7 @@ CLOSE WINDOW($wId)
 
 **Note**: The method is executed in a new process, so that an abortion, TRACE or other blocking operation does not affect the hotplug monitoring process. The plugin starts two processes to handle multiple events; the monitoring process keeps to its schedule, while the other process spawns a new process to run the callback method.
 
-To finish monitoring, pass an empty string as method name. If you forget to terminate the monitoring process, the plugin will close it anyway, but for this mechanism to work you need to have an On Exit database method (it can be empty) on v13 (the plugin checks if the closing process name is ```$xx```. Note that since v14, ```$xx`` is created even if the On Exit database method is undefined.
+To finish monitoring, pass an empty string as method name. If you forget to terminate the monitoring process, the plugin will close it anyway, but for this mechanism to work you need to have an On Exit database method (it can be empty) on v13 (the plugin checks if the closing process name is ```$xx```. Note that since v14, ```$xx``` is created even if the On Exit database method is undefined.
 
 Transfer
 ---
