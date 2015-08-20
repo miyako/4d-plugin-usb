@@ -53,7 +53,7 @@ Transfer
 
 **About**
 
-Only bulk and interrput transfers are supported. Control and isochronous transfers are not supported. Read nore about USB transfers at [USB in a NutShell](http://www.beyondlogic.org/usbnutshell/usb1.shtml).
+Only bulk and interrput transfers are supported. Control and isochronous transfers are not supported. Read more about USB transfers at [USB in a NutShell](http://www.beyondlogic.org/usbnutshell/usb1.shtml).
 
 * Example read/write method
 
