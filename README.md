@@ -50,7 +50,7 @@ CLOSE WINDOW($wId)
 
 To finish monitoring, pass an empty string as method name. If you forget to terminate the monitoring process, the plugin will close it anyway, but for this mechanism to work you need to have an On Exit database method (it can be empty) on v13 (the plugin checks if the closing process name is ```$xx```. Note that since v14, ```$xx`` is created even if the On Exit database method is undefined.
 
-Trasfer
+Transfer
 ---
 
 **About**
