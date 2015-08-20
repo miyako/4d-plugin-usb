@@ -10,6 +10,12 @@
 
 #include "libusb.h"
 
+
+#if VERSIONWIN
+#include <algorithm>//std::find
+#include <Rpc.h> //UuidCreate
+#endif
+
 // --- USB
 void USB_SET_HOTPLUG_METHOD(sLONG_PTR *pResult, PackagePtr pParams);
 void USB_Get_hotplug_method(sLONG_PTR *pResult, PackagePtr pParams);

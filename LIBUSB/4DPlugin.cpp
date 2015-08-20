@@ -43,14 +43,14 @@ void generateUuid(C_TEXT &returnValue){
     RPC_WSTR str;
     UUID uuid;
     int len;
-    UniChar *buffer;
+    wchar_t *buffer;
     if(UuidCreate(&uuid) == RPC_S_OK){
         if(UuidToString(&uuid, &str)==RPC_S_OK){
             len = (wcslen((const wchar_t *)str)*2)+2;
-            buffer = (UniChar *)malloc(len);if(buffer){
+            buffer = (wchar_t *)malloc(len);if(buffer){
                 memset(buffer,0x00, len);
                 memcpy(buffer, str, len);
-                _wcsupr(buffer);
+                _wcsupr((wchar_t *)buffer);
                 CUTF16String uid = (const PA_Unichar *)buffer;
                 returnValue.setUTF16String(&uid);
                 free(buffer);
@@ -549,7 +549,7 @@ usb_enpoint_t get_endpoint_type(int endpoint){
     return endpoint_type;
 }
 
-void libusb_transfer_cb(libusb_transfer *transfer){
+void libusb_transfer_cb(struct libusb_transfer *transfer){
     user_data_t *user_data = (user_data_t *)transfer->user_data;
     user_data->status = transfer->status;
     
@@ -1395,7 +1395,7 @@ void USB_INTERRUPT_TRANSFER(sLONG_PTR *pResult, PackagePtr pParams)
                         endpoint,
                         buffer,
                         length,
-                        libusb_transfer_cb,
+                        (libusb_transfer_cb_fn)libusb_transfer_cb,
                         &user_data,
                         timeout);
                 
@@ -1482,7 +1482,7 @@ void USB_BULK_TRANSFER(sLONG_PTR *pResult, PackagePtr pParams)
                         endpoint,
                         buffer,
                         length,
-                        libusb_transfer_cb,
+                        (libusb_transfer_cb_fn)libusb_transfer_cb,
                         &user_data,
                         timeout);
                 
