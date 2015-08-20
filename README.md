@@ -3,78 +3,108 @@ Basic implementation (bulk in/out) of LIBUSB
 
 Windows binaries from [libusb](https://github.com/libusb/libusb/wiki/Windows).
 
-Example
+Hotplug
+---
+```
+//On Startup
+USB SET HOTPLUG METHOD ("HOTPLUG_CB";$usb_error)
+$methodName:=USB Get hotplug method ($usb_error)
+```
+
+**About**
+
+Two local processes named $USB and $USB_HOTPLUG are launched.
+
+It will call LIBUSB for 0.1 seconds, then sleep for 0.9 seconds. If a device is conneced or disconnected, the callback method will be executed in a new process ({name:Generate UUID). The method will receive 3 parameters; type of event, vendor id and product id.
+
+* Example callback method
+
+```
+C_LONGINT($1;$2;$3)
+
+$vendorId:=String($2;"&x")
+$productId:=String($3;"&x")
+
+$wId:=Open window(Screen width\2-250;\
+Screen height\2-25;\
+Screen width\2+250;\
+Screen height\2+25;Pop up window)
+
+Case of 
+: ($1=USB DEVICE ARRIVED)
+
+MESSAGE("USB DEVICE ARRIVED\rvid:"+$vendorId+"\rpid:"+$productId)
+
+: ($1=USB DEVICE LEFT)
+
+MESSAGE("USB DEVICE LEFT\rvid:"+$vendorId+"\rpid:"+$productId)
+
+End case 
+
+DELAY PROCESS(Current process;180)
+
+CLOSE WINDOW($wId)
+```
+
+**Note**: The method is executed in a new process, so that an abortion, TRACE or other blocking operation does not affect the hotplug monitoring process. The plugin starts two processes to handle multiple events; the monitoring process keeps to its schedule, while the other process spawns a new process to run the callback method.
+
+To finish monitoring, pass an empty string as method name. If you forget to terminate the monitoring process, the plugin will close it anyway, but for this mechanism to work you need to have an On Exit database method (it can be empty) on v13 (the plugin checks if the closing process name is ```$xx```. Note that since v14, ```$xx`` is created even if the On Exit database method is undefined.
+
+Trasfer
 ---
 
-**Device list**
+**About**
+
+Only bulk and interrput transfers are supported. Control and isochronous transfers are not supported. Read nore about USB transfers at [USB in a NutShell](http://www.beyondlogic.org/usbnutshell/usb1.shtml).
+
+* Example read/write method
 
 ```
-ARRAY LONGINT($vendorIds;0)
-ARRAY LONGINT($productIds;0)
-ARRAY LONGINT($interfaceCounts;0)
-ARRAY TEXT($endpointsJSONs;0)
+USB GET DEVICE LIST ($deviceRefs;$vendorIds;$productIds;$usb_error)
+For ($i;1;Size of array($deviceRefs))
+$deviceRef:=$deviceRefs{$i}
+$deviceHandleRef:=USB Open ($deviceRef)
+$productName:=LIBUSB_Get_product ($deviceHandleRef)
+ARRAY OBJECT($interfaces;0)
+LIBUSB_GET_INTERFACES ($deviceHandleRef;->$interfaces)
+For ($j;1;Size of array($interfaces))
+ARRAY OBJECT($altsetting;0)
+OB GET ARRAY($interfaces{$j};"altsetting";$altsetting)
+For ($k;1;Size of array($altsetting))
+$interface:=OB Get($altsetting{$k};"bInterfaceNumber")
+USB CLAIM INTERFACE ($deviceHandleRef;$interface;$usb_error)
+If ($usb_error=LIBUSB_SUCCESS)
+ARRAY OBJECT($endpoint;0)
+OB GET ARRAY($altsetting{$k};"endpoint";$endpoint)
+If (Size of array($endpoint)#0)
+  //you can claim the interface of the Bluetooth host controller, but it has no endpoints
+For ($l;1;Size of array($endpoint))
+$eEndpointAddress:=OB Get($endpoint{$l};"bEndpointAddress")
+C_BLOB($data)
+$timeout:=3000  //millisec
+USB INTERRUPT TRANSFER ($deviceHandleRef;$eEndpointAddress;$data;$timeout;$status;$usb_error)
+If ($usb_error=LIBUSB_SUCCESS)
+ALERT("interrupt "+LIBUSB_Get_direction ($eEndpointAddress)+$productName+": "+USB Get error description ($status))
+Else 
+  //ALERT("can't read/write "+$productName+": "+USB Get error description ($usb_error))
+End if 
 
-USB DEVICE LIST ($vendorIds;$productIds;$interfaceCounts;$endpointsJSONs)
-
-ARRAY OBJECT($endpoints;0)
-
-For ($i;1;Size of array($endpointsJSONs))
-
-  CLEAR VARIABLE($endpoint)
-  $endpoint:=JSON Parse($endpointsJSONs{$i})
-  APPEND TO ARRAY($endpoints;$endpoint)
+USB BULK TRANSFER ($deviceHandleRef;$eEndpointAddress;$data;$timeout;$status;$usb_error)
+If ($usb_error=LIBUSB_SUCCESS)
+ALERT("bulk "+LIBUSB_Get_direction ($eEndpointAddress)+$productName+": "+USB Get error description ($status))
+Else 
+  //ALERT("can't read/write "+$productName+": "+USB Get error description ($usb_error))
+End if 
 
 End for 
-
-  //libusb_get_device_list
-  //http://libusb.sourceforge.net/api-1.0/group__dev.html#gac0fe4b65914c5ed036e6cbec61cb0b97
-
-```
-
-**Dymo (Untested)**
-
-```
-  //http://steventsnyder.com/reading-a-dymo-usb-scale-using-python/
-
-$vendorId:=0x0922
-$productId:=0x8009
-$interface:=0
-
-$usbId:=USB DEVICE Open ($vendorId;$productId;$interface)
-
-C_BLOB($data)
-
-If ($usbId#0)
-
-  $endpoint:=0
-  $maxLength:=8
-  $timeout:=1000  //milliseconds
-
-  $receivedLength:=USB Read data ($usbId;$endpoint;$data;$maxLength;$timeout)
-    //$swrittenLength:=USB Write data ($usbId;$endpoint;$data;$timeout)
-
-  USB DEVICE CLOSE ($usbId)
-
 End if 
+USB RELEASE INTERFACE ($deviceHandleRef;$interface;$usb_error)
 
-If (BLOB size($data)=6)
-
-  $signature:=$data{0}  //always 3
-  $stable:=$data{1}
-  $flag:=$data{2}  //2=kg, 11=lb
-  Case of 
-   : (255=$data{3})
-    $scalingFactor:=0.1
-   : (254=$data{3})
-    $scalingFactor:=0.01
-   : (253=$data{3})
-    $scalingFactor:=0.001
-   Else 
-    $scalingFactor:=1
-  End case 
-
-  $grams:=$data{4}+(256*$data{5})
-  $ounces=$scalingFactor*($data{4}+(256*$data{5}))
-
+Else 
+  //ALERT("can't claim "+$productName+": "+USB Get error description ($usb_error))
 End if 
+End for 
+End for 
+USB CLOSE ($deviceHandleRef)
+End for 
 ```
