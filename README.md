@@ -118,3 +118,5 @@ On my computer, I could claim the Camera interface, but it has no endpoints to w
 I could also claim the Super Drive, but only if connected via a USB hub that does not supply power (to make it inactive, I suppose).
 
 Feedback on real devices are welcome...
+
+**Note**: For prerequisites on Windows see (https://github.com/libusb/libusb/wiki/Windows).
