@@ -119,4 +119,4 @@ I could also claim the Super Drive, but only if connected via a USB hub that doe
 
 Feedback on real devices are welcome...
 
-**Note**: For prerequisites on Windows see (https://github.com/libusb/libusb/wiki/Windows).
+**Note**: For prerequisites on Windows see https://github.com/libusb/libusb/wiki/Windows.
