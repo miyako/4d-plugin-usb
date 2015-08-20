@@ -1,5 +1,5 @@
 # 4d-plugin-usb
-Basic implementation (bulk in/out) of LIBUSB
+Basic implementation of [libusb](https://github.com/libusb/libusb) for 4D.
 
 Windows binaries from [libusb](https://github.com/libusb/libusb/wiki/Windows).
 
