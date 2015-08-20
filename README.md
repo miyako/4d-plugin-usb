@@ -108,3 +108,15 @@ End for
 USB CLOSE ($deviceHandleRef)
 End for 
 ```
+
+**Note***: Apparently you can't claim most HID devices on Mac, unless you fiddle with kext (kernel extensions).
+
+[https://github.com/libusb/libusb/wiki/FAQ](https://github.com/libusb/libusb/wiki/FAQ)
+
+Perhaps one should use [HID_Utilities](https://developer.apple.com/library/mac/samplecode/HID_Utilities/Introduction/Intro.html) instead.
+
+On my computer, I could claim the Camera interface, but it has no endpoints to work with.
+
+I could also claim the Super Drive, but only if connected via a USB hub that does not supply power (to make it inactive, I suppose).
+
+Feedback on real devices are welcome...
