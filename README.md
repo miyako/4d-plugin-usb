@@ -1,6 +1,48 @@
 # 4d-plugin-usb
 Basic implementation of [libusb](https://github.com/libusb/libusb) for 4D.
 
+##Platform
+
+| carbon | cocoa | win32 | win64 |
+|:------:|:-----:|:---------:|:---------:|
+|🆗|🆗|🆗|🆗|
+
+Commands
+---
+
+```c
+// --- USB
+USB_SET_HOTPLUG_METHOD
+USB_Get_hotplug_method
+USB_SET_LOCALE
+USB_GET_VERSION
+USB_Get_error_description
+USB_Get_error_name
+USB_GET_DEVICE_LIST
+USB_Get_device_descriptor
+USB_Get_config_descriptor
+USB_Open
+USB_CLAIM_INTERFACE
+USB_RELEASE_INTERFACE
+USB_CLOSE
+USB_Get_device
+USB_SET_INTERFACE_ALT_SETTING
+USB_SET_CONFIGURATION
+USB_Get_configuration
+USB_Open_device_with_vid_pid
+USB_BULK_TRANSFER
+USB_Get_bus_number
+USB_Get_port_number
+USB_Get_device_address
+USB_Get_device_speed
+USB_CLEAR_HALT
+USB_GET_DESCRIPTOR
+USB_INTERRUPT_TRANSFER
+```
+
+Examples
+---
+
 Hotplug
 ---
 ```
