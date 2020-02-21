@@ -12,24 +12,48 @@
 #include "4DPluginAPI.h"
 #include "4DPlugin.h"
 
-bool LIBUSB_IS_READY = FALSE;
-bool LIBUSB_HOTPLUG_IS_READY = FALSE;
-libusb_device **LIBUSB_DEVICE_LIST = NULL;
-process_number_t LISTENER_METHOD_PROCESS_ID = 0;
-process_stack_size_t LISTENER_METHOD_STACK_SIZE = 512*1024;
-method_id_t LISTENER_METHOD_ID = 0;
-int  LISTENER_METHOD_COMPLETED = 0;
-process_name_t LISTENER_METHOD_PROCESS_NAME = (PA_Unichar *)"$\0U\0S\0B\0_\0H\0O\0T\0P\0L\0U\0G\0\0\0";
-bool LISTENER_METHOD_PROCESS_SHOULD_TERMINATE = false;
-bool LISTENER_METHOD_PROCESS_SHOULD_EXECUTE_METHOD = false;
-C_TEXT LISTENER_METHOD;
-PA_Variable LISTENER_METHOD_PARAMS[3];
-libusb_hotplug_callback_handle ArrivedEventCallbackHandle, DetachedEventCallbackHandle;
-libusb_context *HOTPLUG_CONTEXT = NULL;
+std::mutex globalMutex; /* userInfos,ArrivedEventCallbackHandle,DetachedEventCallbackHandle */
+std::mutex globalMutex1;/* for METHOD_PROCESS_ID */
+std::mutex globalMutex2;/* for LISTENER_METHOD */
+std::mutex globalMutex3;/* PROCESS_SHOULD_TERMINATE */
+std::mutex globalMutex4;/* PROCESS_SHOULD_RESUME */
+
+std::mutex globalMutex_LIBUSB_IS_READY;
+std::mutex globalMutex_LIBUSB_HOTPLUG_IS_READY;
+std::mutex globalMutex_LIBUSB_DEVICE_LIST;
+std::mutex globalMutex_HOTPLUG_CONTEXT;
+
+namespace LIBUSB
+{
+    typedef struct {
+        int event;
+        int vendor;
+        int product;
+    }ctx;
+
+    //constants
+    process_stack_size_t STACK_SIZE = 0;
+    process_name_t PROCESS_NAME = (PA_Unichar *)"$\0U\0S\0B\0_\0H\0O\0T\0P\0L\0U\0G\0\0\0";
+    
+    //context management
+    bool LIBUSB_IS_READY = FALSE;
+    bool LIBUSB_HOTPLUG_IS_READY = FALSE;
+    std::vector<ctx>userInfos;
+
+    //callback management
+    C_TEXT LISTENER_METHOD;
+    process_number_t METHOD_PROCESS_ID = 0;
+    bool PROCESS_SHOULD_TERMINATE = false;
+    bool PROCESS_SHOULD_RESUME = false;
+    
+    libusb_hotplug_callback_handle ArrivedEventCallbackHandle, DetachedEventCallbackHandle;
+    libusb_context *HOTPLUG_CONTEXT = NULL;
+    libusb_device **LIBUSB_DEVICE_LIST = NULL;
+}
 
 #pragma mark -
 
-void generateUuid(C_TEXT &returnValue){
+void generateUuid(C_TEXT &returnValue) {
     
 #if VERSIONMAC
 #if __MAC_OS_X_VERSION_MAX_ALLOWED >= 1080
@@ -63,7 +87,8 @@ void generateUuid(C_TEXT &returnValue){
 
 #pragma mark -
 
-bool IsProcessOnExit(){
+bool IsProcessOnExit() {
+    
     C_TEXT name;
     PA_long32 state, time;
     PA_GetProcessInfo(PA_GetCurrentProcessNumber(), name, &state, &time);
@@ -72,14 +97,41 @@ bool IsProcessOnExit(){
     return (!procName.compare(exitProcName));
 }
 
-void OnStartup(){
-    if(LIBUSB_SUCCESS == libusb_init(NULL)){
+void OnStartup() {
+    
+    if(LIBUSB_SUCCESS == libusb_init(NULL)) {
+        
         printf("libusb_init: default context\n");
-        LIBUSB_IS_READY = true;
-        if(libusb_has_capability(LIBUSB_CAP_HAS_HOTPLUG)){
-            if(LIBUSB_SUCCESS == libusb_init(&HOTPLUG_CONTEXT)){
+        
+        if(1)
+        {
+            std::lock_guard<std::mutex> lock(globalMutex_LIBUSB_IS_READY);
+            
+            LIBUSB::LIBUSB_IS_READY = true;
+        }
+        
+        if(libusb_has_capability(LIBUSB_CAP_HAS_HOTPLUG)) {
+            
+            int status = 0;
+            
+            if(1)
+            {
+                std::lock_guard<std::mutex> lock(globalMutex_HOTPLUG_CONTEXT);
+                
+                status = libusb_init(&LIBUSB::HOTPLUG_CONTEXT);
+            }
+            
+            if(LIBUSB_SUCCESS == status) {
+                
                 printf("libusb_init: hotplug context\n");
-                LIBUSB_HOTPLUG_IS_READY = true;
+                
+                if(1)
+                {
+                    std::lock_guard<std::mutex> lock(globalMutex_LIBUSB_HOTPLUG_IS_READY);
+                    
+                    LIBUSB::LIBUSB_HOTPLUG_IS_READY = true;
+                }
+                
             }
             printf("LIBUSB_CAP_HAS_HOTPLUG:YES\n");
         }else{
@@ -91,19 +143,31 @@ void OnStartup(){
             printf("LIBUSB_CAP_SUPPORTS_DETACH_KERNEL_DRIVER:NO\n");
         }
     }
+    
 }
 
 void OnCloseProcess(){
-    if(LIBUSB_IS_READY){
+    
+    if(LIBUSB::LIBUSB_IS_READY){
         if(IsProcessOnExit()){
             close_all_device_handles();
             libusb_exit(NULL);
             printf("libusb_exit\n");
-            LIBUSB_IS_READY = false;
-            if(LIBUSB_HOTPLUG_IS_READY){
+            LIBUSB::LIBUSB_IS_READY = false;
+            if(LIBUSB::LIBUSB_HOTPLUG_IS_READY) {
+                
                 PA_RunInMainProcess((PA_RunInMainProcessProcPtr)listenerLoopFinish, NULL);
-                libusb_exit(HOTPLUG_CONTEXT);
-                LIBUSB_HOTPLUG_IS_READY = false;
+                
+                libusb_exit(LIBUSB::HOTPLUG_CONTEXT);
+                    
+                if(1)
+                {
+                    std::lock_guard<std::mutex> lock(globalMutex_LIBUSB_HOTPLUG_IS_READY);
+                    
+                    LIBUSB::LIBUSB_HOTPLUG_IS_READY = false;
+                }
+                
+                
             }
         }
     }
@@ -116,145 +180,334 @@ static int LIBUSB_CALL hotplug_callback(libusb_context *ctx, libusb_device *dev,
     struct libusb_device_descriptor desc;
     int libusb_error = libusb_get_device_descriptor(dev, &desc);
     if (libusb_error == LIBUSB_SUCCESS){
-        listenerLoopExecute(event, desc.idVendor, desc.idProduct);
+        
+        if(1)
+        {
+            std::lock_guard<std::mutex> lock(globalMutex);
+            
+            LIBUSB::ctx userInfo = {event, desc.idVendor, desc.idProduct};
+            
+            LIBUSB::userInfos.push_back(userInfo);
+        }
+
     }
     return 0;
 }
 
 #pragma mark -
 
-void listenerLoop(){
+void listenerLoop() {
     
-    LISTENER_METHOD_PROCESS_SHOULD_EXECUTE_METHOD = false;
-    LISTENER_METHOD_PROCESS_SHOULD_TERMINATE = false;
+    if(1)
+    {
+         std::lock_guard<std::mutex> lock(globalMutex3);
+
+        LIBUSB::PROCESS_SHOULD_TERMINATE = false;
+    }
     
-    while(!LISTENER_METHOD_PROCESS_SHOULD_TERMINATE)
+    /* Current process returns 0 for PA_NewProcess */
+    PA_long32 currentProcessNumber = PA_GetCurrentProcessNumber();
+    
+    while(!PA_IsProcessDying())
     {
         PA_YieldAbsolute();
         
-        if(LISTENER_METHOD_PROCESS_SHOULD_EXECUTE_METHOD){
-            
-            LISTENER_METHOD_PROCESS_SHOULD_EXECUTE_METHOD = false;
-            
-            C_TEXT processName;
-            generateUuid(processName);
-            PA_NewProcess((void *)listenerLoopExecuteMethod,
-                          LISTENER_METHOD_STACK_SIZE,
-                          (PA_Unichar *)processName.getUTF16StringPtr());
-            
+        bool PROCESS_SHOULD_RESUME;
+        bool PROCESS_SHOULD_TERMINATE;
+        
+        if(1)
+        {
+            PROCESS_SHOULD_RESUME = LIBUSB::PROCESS_SHOULD_RESUME;
+            PROCESS_SHOULD_TERMINATE = LIBUSB::PROCESS_SHOULD_TERMINATE;
         }
         
-        if(!LISTENER_METHOD_PROCESS_SHOULD_TERMINATE){
-            PA_FreezeProcess(PA_GetCurrentProcessNumber());
-        }else{
-            LISTENER_METHOD_PROCESS_ID = 0;
+        
+        if(PROCESS_SHOULD_RESUME)
+        {
+            size_t userInfos;
+            
+            if(1)
+            {
+                std::lock_guard<std::mutex> lock(globalMutex);
+                
+                userInfos = LIBUSB::userInfos.size();
+            }
+            
+            while(userInfos)
+            {
+                PA_YieldAbsolute();
+                
+                if(CALLBACK_IN_NEW_PROCESS)
+                {
+                    C_TEXT processName;
+                    generateUuid(processName);
+                    PA_NewProcess((void *)listenerLoopExecuteMethod,
+                                                LIBUSB::STACK_SIZE,
+                                                (PA_Unichar *)processName.getUTF16StringPtr());
+                }else
+                {
+                    listenerLoopExecuteMethod();
+                }
+                
+                if (PROCESS_SHOULD_TERMINATE)
+                    break;
+                
+                if(1)
+                {
+                    std::lock_guard<std::mutex> lock(globalMutex);
+                    
+                    userInfos = LIBUSB::userInfos.size();
+                    PROCESS_SHOULD_TERMINATE = LIBUSB::PROCESS_SHOULD_TERMINATE;
+                }
+            }
+            
+            if(1)
+            {
+                std::lock_guard<std::mutex> lock(globalMutex4);
+                
+                LIBUSB::PROCESS_SHOULD_RESUME = false;
+            }
+            
+        }else
+        {
+            /* DELAY PROCESS does not work for PA_NewProcess */
+            PA_PutProcessToSleep(currentProcessNumber, CALLBACK_SLEEP_TIME);
         }
+            
+        if(1)
+        {
+            PROCESS_SHOULD_TERMINATE = LIBUSB::PROCESS_SHOULD_TERMINATE;
+        }
+        
+        if (PROCESS_SHOULD_TERMINATE)
+            break;
     }
+    
+    if(1)
+    {
+        std::lock_guard<std::mutex> lock(globalMutex);
+        
+        LIBUSB::userInfos.clear();
+    }
+    
+    if(1)
+    {
+        std::lock_guard<std::mutex> lock(globalMutex2);
+        
+        LIBUSB::LISTENER_METHOD.setUTF16String((PA_Unichar *)"\0\0", 0);
+    }
+    
+    if(1)
+    {
+        std::lock_guard<std::mutex> lock(globalMutex1);
+        
+        LIBUSB::METHOD_PROCESS_ID = 0;
+    }
+
     PA_KillProcess();
 }
 
-void listenerLoopStart(){
+void listenerLoopStart() {
     
-    if(!LISTENER_METHOD_PROCESS_ID){
+    if(!LIBUSB::METHOD_PROCESS_ID)
+    {
+        std::lock_guard<std::mutex> lock(globalMutex1);
         
-        LISTENER_METHOD_PROCESS_ID = PA_NewProcess((void *)listenerLoop,
-                                                   LISTENER_METHOD_STACK_SIZE,
-                                                   LISTENER_METHOD_PROCESS_NAME);
+        LIBUSB::METHOD_PROCESS_ID = PA_NewProcess((void *)listenerLoop,
+                                                       LIBUSB::STACK_SIZE,
+                                                       LIBUSB::PROCESS_NAME);
+        
+        PA_NewProcess((void *)listenerLoopServer, LIBUSB::STACK_SIZE, (PA_Unichar *)"$\0U\0S\0B\0\0\0");
         
         int product_id, vendor_id, class_id;
         vendor_id  = LIBUSB_HOTPLUG_MATCH_ANY;
         product_id = LIBUSB_HOTPLUG_MATCH_ANY;
         class_id   = LIBUSB_HOTPLUG_MATCH_ANY;
         
-        ArrivedEventCallbackHandle = NULL;
-        DetachedEventCallbackHandle = NULL;
-        
-        if(LIBUSB_SUCCESS == libusb_hotplug_register_callback(HOTPLUG_CONTEXT,
-                                                              (libusb_hotplug_event)LIBUSB_HOTPLUG_EVENT_DEVICE_ARRIVED,
-                                                              (libusb_hotplug_flag)0,
-                                                              vendor_id,
-                                                              product_id,
-                                                              class_id,
-                                                              (libusb_hotplug_callback_fn)hotplug_callback,
-                                                              (void *)NULL,
-                                                              (libusb_hotplug_callback_handle *)&ArrivedEventCallbackHandle)){
-            printf("libusb_hotplug_register_callback(LIBUSB_HOTPLUG_EVENT_DEVICE_ARRIVED)\n");
+        if(1)
+        {
+            std::lock_guard<std::mutex> lock(globalMutex);
+            
+            LIBUSB::ArrivedEventCallbackHandle = NULL;
+            LIBUSB::DetachedEventCallbackHandle = NULL;
+            
+            if(LIBUSB_SUCCESS == libusb_hotplug_register_callback(LIBUSB::HOTPLUG_CONTEXT,
+                                                                  (libusb_hotplug_event)LIBUSB_HOTPLUG_EVENT_DEVICE_ARRIVED,
+                                                                  (libusb_hotplug_flag)0,
+                                                                  vendor_id,
+                                                                  product_id,
+                                                                  class_id,
+                                                                  (libusb_hotplug_callback_fn)hotplug_callback,
+                                                                  (void *)NULL,
+                                                                  (libusb_hotplug_callback_handle *)&LIBUSB::ArrivedEventCallbackHandle)){
+                printf("libusb_hotplug_register_callback(LIBUSB_HOTPLUG_EVENT_DEVICE_ARRIVED)\n");
+            }
+            
+            if(LIBUSB_SUCCESS == libusb_hotplug_register_callback(LIBUSB::HOTPLUG_CONTEXT,
+                                                                  (libusb_hotplug_event)LIBUSB_HOTPLUG_EVENT_DEVICE_LEFT,
+                                                                  (libusb_hotplug_flag)0,
+                                                                  vendor_id,
+                                                                  product_id,
+                                                                  class_id,
+                                                                  (libusb_hotplug_callback_fn)hotplug_callback,
+                                                                  (void *)NULL,
+                                                                  (libusb_hotplug_callback_handle *)&LIBUSB::DetachedEventCallbackHandle)){
+                printf("libusb_hotplug_register_callback(LIBUSB_HOTPLUG_EVENT_DEVICE_LEFT)\n");
+            }
         }
-        
-        if(LIBUSB_SUCCESS == libusb_hotplug_register_callback(HOTPLUG_CONTEXT,
-                                                              (libusb_hotplug_event)LIBUSB_HOTPLUG_EVENT_DEVICE_LEFT,
-                                                              (libusb_hotplug_flag)0,
-                                                              vendor_id,
-                                                              product_id,
-                                                              class_id,
-                                                              (libusb_hotplug_callback_fn)hotplug_callback,
-                                                              (void *)NULL,
-                                                              (libusb_hotplug_callback_handle *)&DetachedEventCallbackHandle)){
-            printf("libusb_hotplug_register_callback(LIBUSB_HOTPLUG_EVENT_DEVICE_LEFT)\n");
-        }
-        
     }
 }
 
-void listenerLoopFinish(){
-    if(LISTENER_METHOD_PROCESS_ID){
-        //uninstall handler
-        if(ArrivedEventCallbackHandle){
-            libusb_hotplug_deregister_callback(HOTPLUG_CONTEXT, ArrivedEventCallbackHandle);
-            printf("libusb_hotplug_deregister_callback\n");
-            ArrivedEventCallbackHandle = NULL;
+void listenerLoopFinish() {
+    
+    if(LIBUSB::METHOD_PROCESS_ID)
+    {
+        if(1)
+        {
+            std::lock_guard<std::mutex> lock(globalMutex3);
+            
+            LIBUSB::PROCESS_SHOULD_TERMINATE = true;
         }
-        //uninstall handler
-        if(DetachedEventCallbackHandle){
-            libusb_hotplug_deregister_callback(HOTPLUG_CONTEXT, DetachedEventCallbackHandle);
-            printf("libusb_hotplug_deregister_callback\n");
-            DetachedEventCallbackHandle = NULL;
-        }
-        //set flags
-        LISTENER_METHOD_PROCESS_SHOULD_TERMINATE = true;
-        LISTENER_METHOD_PROCESS_SHOULD_EXECUTE_METHOD = false;
-        LISTENER_METHOD_COMPLETED = 1;
+
         PA_YieldAbsolute();
-        //tell listener to die
-        while(LISTENER_METHOD_PROCESS_ID){
-            PA_YieldAbsolute();
-            PA_UnfreezeProcess(LISTENER_METHOD_PROCESS_ID);
+        
+        if(1)
+        {
+            std::lock_guard<std::mutex> lock(globalMutex4);
+            
+            LIBUSB::PROCESS_SHOULD_RESUME = true;
+        }
+        
+        //uninstall handler
+        if(LIBUSB::DetachedEventCallbackHandle){
+            libusb_hotplug_deregister_callback(LIBUSB::HOTPLUG_CONTEXT, LIBUSB::DetachedEventCallbackHandle);
+            printf("libusb_hotplug_deregister_callback\n");
+            LIBUSB::DetachedEventCallbackHandle = NULL;
         }
     }
 }
 
-void listenerLoopExecute(int event, int vendor, int product){
-    LISTENER_METHOD_PROCESS_SHOULD_TERMINATE = false;
-    PA_SetLongintVariable(&LISTENER_METHOD_PARAMS[0], event);
-    PA_SetLongintVariable(&LISTENER_METHOD_PARAMS[1], vendor);
-    PA_SetLongintVariable(&LISTENER_METHOD_PARAMS[2], product);
-    LISTENER_METHOD_PROCESS_SHOULD_EXECUTE_METHOD = true;
-    PA_UnfreezeProcess(LISTENER_METHOD_PROCESS_ID);
+void listenerLoopExecute() {
+    
+    if(1)
+    {
+        std::lock_guard<std::mutex> lock(globalMutex3);
+        
+        LIBUSB::PROCESS_SHOULD_TERMINATE = false;
+    }
+    
+    if(1)
+    {
+        std::lock_guard<std::mutex> lock(globalMutex4);
+        
+        LIBUSB::PROCESS_SHOULD_RESUME = true;
+    }
+    
 }
 
-void listenerLoopExecuteMethod(){
-    if(LISTENER_METHOD_ID){
-        PA_ExecuteMethodByID(LISTENER_METHOD_ID, LISTENER_METHOD_PARAMS, 3);
+void listenerLoopExecuteMethod() {
+    
+    LIBUSB::ctx userInfo;
+
+    if(1)
+    {
+        std::lock_guard<std::mutex> lock(globalMutex);
+
+        std::vector<LIBUSB::ctx>::iterator p;
+        
+        p = LIBUSB::userInfos.begin();
+        
+        userInfo = *p;
+        
+        LIBUSB::userInfos.erase(p);
+    }
+    
+    method_id_t methodId = PA_GetMethodID((PA_Unichar *)LIBUSB::LISTENER_METHOD.getUTF16StringPtr());
+    
+    if(methodId)
+    {
+        PA_Variable    params[3];
+        params[0] = PA_CreateVariable(eVK_Longint);
+        params[1] = PA_CreateVariable(eVK_Longint);
+        params[2] = PA_CreateVariable(eVK_Longint);
+        
+        PA_SetLongintVariable(&params[0], userInfo.event);
+        PA_SetLongintVariable(&params[1], userInfo.vendor);
+        PA_SetLongintVariable(&params[2], userInfo.product);
+                
+        PA_ExecuteMethodByID(methodId, params, 3);
+        
+        PA_ClearVariable(&params[0]);
+        PA_ClearVariable(&params[1]);
+        PA_ClearVariable(&params[2]);
+        
+    }else
+    {
+        PA_Variable    params[4];
+        params[1] = PA_CreateVariable(eVK_Longint);
+        params[2] = PA_CreateVariable(eVK_Longint);
+        params[3] = PA_CreateVariable(eVK_Longint);
+
+        PA_SetLongintVariable(&params[1], userInfo.event);
+        PA_SetLongintVariable(&params[2], userInfo.vendor);
+        PA_SetLongintVariable(&params[3], userInfo.product);
+                
+        params[0] = PA_CreateVariable(eVK_Unistring);
+        PA_Unistring method = PA_CreateUnistring((PA_Unichar *)LIBUSB::LISTENER_METHOD.getUTF16StringPtr());
+        PA_SetStringVariable(&params[0], &method);
+        
+        /* execute method */
+        PA_ExecuteCommandByID(1007, params, 4);
+
+        PA_ClearVariable(&params[0]);
+        PA_ClearVariable(&params[1]);
+        PA_ClearVariable(&params[2]);
+        PA_ClearVariable(&params[3]);
     }
 }
 
-void listenerLoopServer(){
+void listenerLoopServer() {
+    
     timeval tv;
     tv.tv_sec = 0;
     tv.tv_usec = 100000;
     //listen for 0.1 secs, sleep for 0.9 secs
-    while(!LISTENER_METHOD_PROCESS_SHOULD_TERMINATE){
+    
+    bool PROCESS_SHOULD_TERMINATE = false;
+    
+    if(1)
+    {
+        std::lock_guard<std::mutex> lock(globalMutex3);
+        
+        PROCESS_SHOULD_TERMINATE = LIBUSB::PROCESS_SHOULD_TERMINATE;
+    }
+    
+    while(!PROCESS_SHOULD_TERMINATE) {
+        
         PA_YieldAbsolute();
-        if(0 > libusb_handle_events_timeout_completed(HOTPLUG_CONTEXT, &tv, &LISTENER_METHOD_COMPLETED)){
+        
+        int LISTENER_METHOD_COMPLETED;
+        
+        if(0 > libusb_handle_events_timeout_completed(LIBUSB::HOTPLUG_CONTEXT, &tv, &LISTENER_METHOD_COMPLETED)){
             break;
         }
-        if(LISTENER_METHOD_PROCESS_SHOULD_TERMINATE){
+        
+        if(PROCESS_SHOULD_TERMINATE){
             break;
+            
         }else{
             PA_PutProcessToSleep(PA_GetCurrentProcessNumber(), 54);
             PA_YieldAbsolute();
         }
+        
+        if(1)
+        {
+            std::lock_guard<std::mutex> lock(globalMutex3);
+            
+            PROCESS_SHOULD_TERMINATE = LIBUSB::PROCESS_SHOULD_TERMINATE;
+        }
     }
+    
     PA_KillProcess();
 }
 
@@ -451,7 +704,9 @@ void close_device_handle(C_LONGINT &param){
 }
 
 void close_all_device_handles(){
-    if(LIBUSB_DEVICE_LIST){
+    
+    if(LIBUSB::LIBUSB_DEVICE_LIST){
+        
         for(auto i = LIBUSB_DEVICE_HANDLES.begin(); i != LIBUSB_DEVICE_HANDLES.end(); ++i){
             uint32_t deviceHandleRef = i->first;
             //should release all claimed interfaces before closing a device handle
@@ -468,21 +723,38 @@ void close_all_device_handles(){
                 printf("libusb_close: handle %i\n", deviceHandleRef);
             }
         }
+        
         LIBUSB_DEVICE_HANDLES.clear();
         LIBUSB_DEVICES.clear();
-        libusb_free_device_list(LIBUSB_DEVICE_LIST, 1);
-        printf("libusb_free_device_list\n");
-        LIBUSB_DEVICE_LIST = NULL;
+        
+        if(1)
+        {
+            std::lock_guard<std::mutex> lock(globalMutex_LIBUSB_DEVICE_LIST);
+            
+            libusb_free_device_list(LIBUSB::LIBUSB_DEVICE_LIST, 1);
+            printf("libusb_free_device_list\n");
+            
+            LIBUSB::LIBUSB_DEVICE_LIST = NULL;
+        }
     }
 }
 
 uint32_t get_device_list(C_LONGINT &error){
-    uint32_t cnt = libusb_get_device_list(NULL, &LIBUSB_DEVICE_LIST);
+    
+    uint32_t cnt;
+    
+    if(1)
+    {
+        std::lock_guard<std::mutex> lock(globalMutex_LIBUSB_DEVICE_LIST);
+        
+        cnt = libusb_get_device_list(NULL, &LIBUSB::LIBUSB_DEVICE_LIST);
+    }
+    
     if(cnt > 0){
         printf("libusb_get_device_list\n");
         for(int i = 0; i < cnt; ++i){
             struct libusb_device_descriptor desc;
-            libusb_device *device = LIBUSB_DEVICE_LIST[i];
+            libusb_device *device = LIBUSB::LIBUSB_DEVICE_LIST[i];
             if(LIBUSB_SUCCESS == libusb_get_device_descriptor(device, &desc)){
                 LIBUSB_DEVICE d;
                 d.device = device;
@@ -496,6 +768,7 @@ uint32_t get_device_list(C_LONGINT &error){
         error.setIntValue(cnt);
         return 0;
     }
+    
     return LIBUSB_DEVICES.size();
 }
 
@@ -720,6 +993,8 @@ void CommandDispatcher (PA_long32 pProcNum, sLONG_PTR *pResult, PackagePtr pPara
 	}
 }
 
+#pragma mark -
+
 // -------------------------------------- USB -------------------------------------
 
 void USB_SET_HOTPLUG_METHOD(sLONG_PTR *pResult, PackagePtr pParams)
@@ -729,29 +1004,16 @@ void USB_SET_HOTPLUG_METHOD(sLONG_PTR *pResult, PackagePtr pParams)
 
 	Param1.fromParamAtIndex(pParams, 1);
 
-    if(LIBUSB_HOTPLUG_IS_READY){
+    if(LIBUSB::LIBUSB_HOTPLUG_IS_READY){
         Param1.fromParamAtIndex(pParams, 1);
-        if(!Param1.getUTF16Length()){
-            if(LISTENER_METHOD.getUTF16Length()){
-                //finish listener
-                LISTENER_METHOD.setUTF16String(Param1.getUTF16StringPtr(), Param1.getUTF16Length());
-                LISTENER_METHOD_ID = 0;
-                PA_RunInMainProcess((PA_RunInMainProcessProcPtr)listenerLoopFinish, NULL);
-            }
+        LIBUSB::LISTENER_METHOD.setUTF16String(Param1.getUTF16StringPtr(), Param1.getUTF16Length());
+        
+        if(Param1.getUTF16Length()){
+            PA_RunInMainProcess((PA_RunInMainProcessProcPtr)listenerLoopStart, NULL);
         }else{
-            method_id_t methodId = PA_GetMethodID((PA_Unichar *)Param1.getUTF16StringPtr());
-            if(methodId){
-                if(methodId != LISTENER_METHOD_ID){
-                    LISTENER_METHOD.setUTF16String(Param1.getUTF16StringPtr(), Param1.getUTF16Length());
-                    LISTENER_METHOD_ID = methodId;
-                    PA_RunInMainProcess((PA_RunInMainProcessProcPtr)listenerLoopFinish, NULL);
-                    PA_RunInMainProcess((PA_RunInMainProcessProcPtr)listenerLoopStart, NULL);
-                    PA_NewProcess((void *)listenerLoopServer, LISTENER_METHOD_STACK_SIZE, (PA_Unichar *)"$\0U\0S\0B\0\0\0");
-                }
-            }else{
-                Param2.setIntValue(LIBUSB_ERROR_OTHER);
-            }
+            PA_RunInMainProcess((PA_RunInMainProcessProcPtr)listenerLoopFinish, NULL);
         }
+        
     }else{
         Param2.setIntValue(LIBUSB_ERROR_OTHER);
     }
@@ -764,8 +1026,8 @@ void USB_Get_hotplug_method(sLONG_PTR *pResult, PackagePtr pParams)
 	C_LONGINT Param1;
 	C_TEXT returnValue;
 
-    if(LIBUSB_HOTPLUG_IS_READY){
-        LISTENER_METHOD.setReturn(pResult);
+    if(LIBUSB::LIBUSB_HOTPLUG_IS_READY){
+        LIBUSB::LISTENER_METHOD.setReturn(pResult);
     }else{
         Param1.setIntValue(LIBUSB_ERROR_OTHER);
         returnValue.setReturn(pResult);
@@ -780,7 +1042,7 @@ void USB_SET_LOCALE(sLONG_PTR *pResult, PackagePtr pParams)
 
 	Param1.fromParamAtIndex(pParams, 1);
 
-    if(LIBUSB_IS_READY){
+    if(LIBUSB::LIBUSB_IS_READY){
         CUTF8String locale;
         Param1.copyUTF8String(&locale);
         Param2.setIntValue(libusb_setlocale((const char *)locale.c_str()));
@@ -800,7 +1062,7 @@ void USB_GET_VERSION(sLONG_PTR *pResult, PackagePtr pParams)
 	C_TEXT Param5;
 	C_TEXT Param6;
 
-    if(LIBUSB_IS_READY){
+    if(LIBUSB::LIBUSB_IS_READY){
         const libusb_version *version;
         version = libusb_get_version();
         Param1.setIntValue(version->major);
@@ -826,7 +1088,7 @@ void USB_Get_error_description(sLONG_PTR *pResult, PackagePtr pParams)
 
 	Param1.fromParamAtIndex(pParams, 1);
 
-    if(LIBUSB_IS_READY){
+    if(LIBUSB::LIBUSB_IS_READY){
         CUTF8String err_name = (const uint8_t *)libusb_strerror((libusb_error)Param1.getIntValue());
         returnValue.setUTF8String(&err_name);
     }
@@ -841,7 +1103,7 @@ void USB_Get_error_name(sLONG_PTR *pResult, PackagePtr pParams)
 
 	Param1.fromParamAtIndex(pParams, 1);
 
-    if(LIBUSB_IS_READY){
+    if(LIBUSB::LIBUSB_IS_READY){
         CUTF8String err_name = (const uint8_t *)libusb_error_name(Param1.getIntValue());
         returnValue.setUTF8String(&err_name);
     }
@@ -856,7 +1118,7 @@ void USB_GET_DEVICE_LIST(sLONG_PTR *pResult, PackagePtr pParams)
 	ARRAY_LONGINT Param3;
 	C_LONGINT Param4;
 
-	if(LIBUSB_IS_READY){
+	if(LIBUSB::LIBUSB_IS_READY){
         close_all_device_handles();
         if(get_device_list(Param4)){
             Param1.setSize(1);
@@ -884,7 +1146,7 @@ void USB_Get_device_descriptor(sLONG_PTR *pResult, PackagePtr pParams)
 
 	Param1.fromParamAtIndex(pParams, 1);
 
-	if(LIBUSB_IS_READY){
+	if(LIBUSB::LIBUSB_IS_READY){
         libusb_device *device = get_device(Param1, Param2);
         if(device){
             struct libusb_device_descriptor desc;
@@ -940,7 +1202,7 @@ void USB_Get_config_descriptor(sLONG_PTR *pResult, PackagePtr pParams)
 	Param1.fromParamAtIndex(pParams, 1);
 	Param2.fromParamAtIndex(pParams, 2);
 	Param3.fromParamAtIndex(pParams, 3);
-	if(LIBUSB_IS_READY){
+	if(LIBUSB::LIBUSB_IS_READY){
         libusb_device *device = get_device(Param1, Param4);
         if(device){
             struct libusb_config_descriptor *config;
@@ -1053,7 +1315,7 @@ void USB_Open(sLONG_PTR *pResult, PackagePtr pParams)
 
 	Param1.fromParamAtIndex(pParams, 1);
 
-	if(LIBUSB_IS_READY){
+	if(LIBUSB::LIBUSB_IS_READY){
         returnValue.setIntValue(open_device(Param1, Param2));
     }
 
@@ -1070,7 +1332,7 @@ void USB_CLAIM_INTERFACE(sLONG_PTR *pResult, PackagePtr pParams)
 	Param1.fromParamAtIndex(pParams, 1);
 	Param2.fromParamAtIndex(pParams, 2);
 
-    if(LIBUSB_IS_READY){
+    if(LIBUSB::LIBUSB_IS_READY){
         claim_interface(Param1, Param2, Param3);
     }
 
@@ -1086,7 +1348,7 @@ void USB_RELEASE_INTERFACE(sLONG_PTR *pResult, PackagePtr pParams)
 	Param1.fromParamAtIndex(pParams, 1);
 	Param2.fromParamAtIndex(pParams, 2);
 
-    if(LIBUSB_IS_READY){
+    if(LIBUSB::LIBUSB_IS_READY){
         release_interface(Param1, Param2, Param3);
     }
 
@@ -1099,7 +1361,7 @@ void USB_CLOSE(sLONG_PTR *pResult, PackagePtr pParams)
 
 	Param1.fromParamAtIndex(pParams, 1);
 
-	if(LIBUSB_IS_READY){
+	if(LIBUSB::LIBUSB_IS_READY){
         close_device_handle(Param1);
     }
 }
@@ -1112,7 +1374,7 @@ void USB_Get_device(sLONG_PTR *pResult, PackagePtr pParams)
 
 	Param1.fromParamAtIndex(pParams, 1);
 
-    if(LIBUSB_IS_READY){
+    if(LIBUSB::LIBUSB_IS_READY){
         libusb_device_handle *deviceHandle = get_device_handle(Param1, Param2);
         if(deviceHandle){
             if(!LIBUSB_DEVICES.size()){
@@ -1157,7 +1419,7 @@ void USB_SET_INTERFACE_ALT_SETTING(sLONG_PTR *pResult, PackagePtr pParams)
 	Param2.fromParamAtIndex(pParams, 2);
 	Param3.fromParamAtIndex(pParams, 3);
 
-	if(LIBUSB_IS_READY){
+	if(LIBUSB::LIBUSB_IS_READY){
         set_alt_setting(Param1, Param2, Param3, Param4);
     }
 
@@ -1173,7 +1435,7 @@ void USB_SET_CONFIGURATION(sLONG_PTR *pResult, PackagePtr pParams)
 	Param1.fromParamAtIndex(pParams, 1);
 	Param2.fromParamAtIndex(pParams, 2);
 
-	if(LIBUSB_IS_READY){
+	if(LIBUSB::LIBUSB_IS_READY){
         set_configuration(Param1, Param2, Param3);
     }
 
@@ -1188,7 +1450,7 @@ void USB_Get_configuration(sLONG_PTR *pResult, PackagePtr pParams)
 
 	Param1.fromParamAtIndex(pParams, 1);
 
-	if(LIBUSB_IS_READY){
+	if(LIBUSB::LIBUSB_IS_READY){
         get_configuration(Param1, returnValue, Param2);
     }
 
@@ -1206,7 +1468,7 @@ void USB_Open_device_with_vid_pid(sLONG_PTR *pResult, PackagePtr pParams)
 	Param1.fromParamAtIndex(pParams, 1);
 	Param2.fromParamAtIndex(pParams, 2);
 
-    if(LIBUSB_IS_READY){
+    if(LIBUSB::LIBUSB_IS_READY){
         returnValue.setIntValue(open_device_with_vid_pid(Param1, Param2, Param3));
     }
 
@@ -1222,7 +1484,7 @@ void USB_Get_bus_number(sLONG_PTR *pResult, PackagePtr pParams)
 
 	Param1.fromParamAtIndex(pParams, 1);
 
-	if(LIBUSB_IS_READY){
+	if(LIBUSB::LIBUSB_IS_READY){
         libusb_device *device = get_device(Param1, Param2);
         if(device){
             returnValue.setIntValue(libusb_get_bus_number(device));
@@ -1241,7 +1503,7 @@ void USB_Get_port_number(sLONG_PTR *pResult, PackagePtr pParams)
 
 	Param1.fromParamAtIndex(pParams, 1);
 
-	if(LIBUSB_IS_READY){
+	if(LIBUSB::LIBUSB_IS_READY){
         libusb_device *device = get_device(Param1, Param2);
         if(device){
             returnValue.setIntValue(libusb_get_port_number(device));
@@ -1260,7 +1522,7 @@ void USB_Get_device_address(sLONG_PTR *pResult, PackagePtr pParams)
 
 	Param1.fromParamAtIndex(pParams, 1);
 
-	if(LIBUSB_IS_READY){
+	if(LIBUSB::LIBUSB_IS_READY){
         libusb_device *device = get_device(Param1, Param2);
         if(device){
             returnValue.setIntValue(libusb_get_device_address(device));
@@ -1279,7 +1541,7 @@ void USB_Get_device_speed(sLONG_PTR *pResult, PackagePtr pParams)
 
 	Param1.fromParamAtIndex(pParams, 1);
 
-	if(LIBUSB_IS_READY){
+	if(LIBUSB::LIBUSB_IS_READY){
         libusb_device *device = get_device(Param1, Param2);
         if(device){
             returnValue.setIntValue(libusb_get_device_speed(device));
@@ -1299,7 +1561,7 @@ void USB_CLEAR_HALT(sLONG_PTR *pResult, PackagePtr pParams)
 	Param1.fromParamAtIndex(pParams, 1);
 	Param2.fromParamAtIndex(pParams, 2);
 
-    if(LIBUSB_IS_READY){
+    if(LIBUSB::LIBUSB_IS_READY){
         libusb_device_handle *deviceHandle = get_device_handle(Param1, Param3);
         if(deviceHandle){
             Param3.setIntValue(libusb_clear_halt(deviceHandle, (unsigned char)Param2.getIntValue()));
@@ -1321,7 +1583,7 @@ void USB_GET_DESCRIPTOR(sLONG_PTR *pResult, PackagePtr pParams)
 	Param2.fromParamAtIndex(pParams, 2);
 	Param3.fromParamAtIndex(pParams, 3);
 
-    if(LIBUSB_IS_READY){
+    if(LIBUSB::LIBUSB_IS_READY){
         libusb_device_handle *deviceHandle = get_device_handle(Param1, Param5);
         if(deviceHandle){
             uint8_t desc_type = (uint8_t)Param2.getIntValue();
@@ -1354,7 +1616,7 @@ void USB_INTERRUPT_TRANSFER(sLONG_PTR *pResult, PackagePtr pParams)
 	Param3.fromParamAtIndex(pParams, 3);
 	Param4.fromParamAtIndex(pParams, 4);
 
-    if(LIBUSB_IS_READY){
+    if(LIBUSB::LIBUSB_IS_READY){
         libusb_device_handle *deviceHandle = get_device_handle(Param1, Param6);
         if(deviceHandle){
         
@@ -1441,7 +1703,7 @@ void USB_BULK_TRANSFER(sLONG_PTR *pResult, PackagePtr pParams)
 	Param3.fromParamAtIndex(pParams, 3);
 	Param4.fromParamAtIndex(pParams, 4);
 
-    if(LIBUSB_IS_READY){
+    if(LIBUSB::LIBUSB_IS_READY){
         libusb_device_handle *deviceHandle = get_device_handle(Param1, Param6);
         if(deviceHandle){
         

@@ -53,15 +53,15 @@
 		D13116F51A03C7AF00DE1322 /* ARRAY_DATE.h in Headers */ = {isa = PBXBuildFile; fileRef = D13116F31A03C7AF00DE1322 /* ARRAY_DATE.h */; };
 		D134D4AC1A030BA0008D14EF /* manifest.json in CopyFiles */ = {isa = PBXBuildFile; fileRef = D134D4A91A030B06008D14EF /* manifest.json */; };
 		D175D9CD1A02E8DD0006B569 /* CoreGraphics.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = D175D9CC1A02E8DD0006B569 /* CoreGraphics.framework */; };
-		D1CDB76C23FF2021008E9946 /* libusb-1.0.a in Frameworks */ = {isa = PBXBuildFile; fileRef = D1CDB76B23FF2021008E9946 /* libusb-1.0.a */; };
 		D1CDB76E23FF204F008E9946 /* IOKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = D1CDB76D23FF204F008E9946 /* IOKit.framework */; };
+		D1EF3BF623FFF24300CFF07B /* libusb-1.0.a in Frameworks */ = {isa = PBXBuildFile; fileRef = D1CDB76B23FF2021008E9946 /* libusb-1.0.a */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXCopyFilesBuildPhase section */
 		D134D4AB1A030B7A008D14EF /* CopyFiles */ = {
 			isa = PBXCopyFilesBuildPhase;
 			buildActionMask = 2147483647;
-			dstPath = "";
+			dstPath = ..;
 			dstSubfolderSpec = 7;
 			files = (
 				D134D4AC1A030BA0008D14EF /* manifest.json in CopyFiles */,
@@ -122,6 +122,7 @@
 		D175D9CC1A02E8DD0006B569 /* CoreGraphics.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CoreGraphics.framework; path = System/Library/Frameworks/CoreGraphics.framework; sourceTree = SDKROOT; };
 		D1CDB76B23FF2021008E9946 /* libusb-1.0.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = "libusb-1.0.a"; path = "a/libusb-1.0.a"; sourceTree = "<group>"; };
 		D1CDB76D23FF204F008E9946 /* IOKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = IOKit.framework; path = System/Library/Frameworks/IOKit.framework; sourceTree = SDKROOT; };
+		D1D8D1D223FF4A13003D5266 /* libusb-1.0.0.dylib */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.dylib"; name = "libusb-1.0.0.dylib"; path = "LIBUSB.4dbase/Plugins/LIBUSB.bundle/Contents/MacOS/libusb-1.0.0.dylib"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -129,8 +130,8 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				D1EF3BF623FFF24300CFF07B /* libusb-1.0.a in Frameworks */,
 				D1CDB76E23FF204F008E9946 /* IOKit.framework in Frameworks */,
-				D1CDB76C23FF2021008E9946 /* libusb-1.0.a in Frameworks */,
 				D13116C71A03B5B600DE1322 /* AppKit.framework in Frameworks */,
 				D175D9CD1A02E8DD0006B569 /* CoreGraphics.framework in Frameworks */,
 				D130064F12F02D9700702C0E /* Cocoa.framework in Frameworks */,
@@ -272,6 +273,7 @@
 		D1CDB76A23FF2021008E9946 /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
+				D1D8D1D223FF4A13003D5266 /* libusb-1.0.0.dylib */,
 				D1CDB76D23FF204F008E9946 /* IOKit.framework */,
 				D1CDB76B23FF2021008E9946 /* libusb-1.0.a */,
 			);
@@ -457,7 +459,7 @@
 				CODE_SIGN_IDENTITY = "";
 				COMBINE_HIDPI_IMAGES = YES;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 2.0;
+				CURRENT_PROJECT_VERSION = 2.1;
 				DEBUGGING_SYMBOLS = YES;
 				DEPLOYMENT_LOCATION = NO;
 				FRAMEWORK_SEARCH_PATHS = "";
@@ -475,7 +477,7 @@
 				INFOPLIST_FILE = Info.plist;
 				INSTALL_PATH = "$(HOME)/Library/Bundles";
 				LIBRARY_SEARCH_PATHS = (
-					"$(PROJECT_DIR)/lib/MacOS/64",
+					"$(PROJECT_DIR)/LIBUSB.4dbase/Plugins/LIBUSB.bundle/Contents/MacOS",
 					"$(PROJECT_DIR)/a",
 				);
 				LIBRARY_STYLE = Bundle;
@@ -501,7 +503,7 @@
 				CODE_SIGN_IDENTITY = "";
 				COMBINE_HIDPI_IMAGES = YES;
 				COPY_PHASE_STRIP = YES;
-				CURRENT_PROJECT_VERSION = 2.0;
+				CURRENT_PROJECT_VERSION = 2.1;
 				DEPLOYMENT_LOCATION = NO;
 				FRAMEWORK_SEARCH_PATHS = "";
 				GCC_ENABLE_FIX_AND_CONTINUE = NO;
@@ -516,7 +518,7 @@
 				INFOPLIST_FILE = Info.plist;
 				INSTALL_PATH = "$(HOME)/Library/Bundles";
 				LIBRARY_SEARCH_PATHS = (
-					"$(PROJECT_DIR)/lib/MacOS/64",
+					"$(PROJECT_DIR)/LIBUSB.4dbase/Plugins/LIBUSB.bundle/Contents/MacOS",
 					"$(PROJECT_DIR)/a",
 				);
 				LIBRARY_STYLE = Bundle;
@@ -541,7 +543,7 @@
 			buildSettings = {
 				CODE_SIGN_IDENTITY = "";
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 2.0;
+				CURRENT_PROJECT_VERSION = 2.1;
 				DEPLOYMENT_LOCATION = NO;
 				FRAMEWORK_SEARCH_PATHS = "";
 				GCC_ENABLE_TRIGRAPHS = NO;
@@ -555,7 +557,7 @@
 				INFOPLIST_FILE = Info.plist;
 				INSTALL_PATH = "$(HOME)/Library/Bundles";
 				LIBRARY_SEARCH_PATHS = (
-					"$(PROJECT_DIR)/lib/MacOS/64",
+					"$(PROJECT_DIR)/LIBUSB.4dbase/Plugins/LIBUSB.bundle/Contents/MacOS",
 					"$(PROJECT_DIR)/a",
 				);
 				LIBRARY_STYLE = Bundle;

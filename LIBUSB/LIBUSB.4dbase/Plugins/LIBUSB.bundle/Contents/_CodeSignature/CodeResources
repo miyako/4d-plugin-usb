@@ -96,7 +96,7 @@
 		<dict>
 			<key>hash</key>
 			<data>
-			2GgoIt61UHPxAvUI/vRIf3yBYc4=
+			uBOU17IqgsfF6WCMA8EXIjD4rNw=
 			</data>
 			<key>optional</key>
 			<true/>
@@ -104,10 +104,6 @@
 		<key>Resources/constants.xlf</key>
 		<data>
 		TLCNerAo0XJo9I5qQRusa93QsnY=
-		</data>
-		<key>Resources/manifest.json</key>
-		<data>
-		k73jfJScwN7psarB0xWB7E7Zd0U=
 		</data>
 	</dict>
 	<key>files2</key>
@@ -369,11 +365,11 @@
 		<dict>
 			<key>hash</key>
 			<data>
-			2GgoIt61UHPxAvUI/vRIf3yBYc4=
+			uBOU17IqgsfF6WCMA8EXIjD4rNw=
 			</data>
 			<key>hash2</key>
 			<data>
-			Kia2woY0m/5Iog80pQeMYgU6jyuoufZGy4/3UelMCwE=
+			Fls+6pLMjAmw5N1AsTE06FK/LEvrYnTQzjVQG36DqB8=
 			</data>
 			<key>optional</key>
 			<true/>
@@ -389,60 +385,36 @@
 			Awf6Cs8ElYLD+VxCo3fYhRPgHDJ8FjIHaPeKwVPf2QY=
 			</data>
 		</dict>
-		<key>Resources/manifest.json</key>
-		<dict>
-			<key>hash</key>
-			<data>
-			k73jfJScwN7psarB0xWB7E7Zd0U=
-			</data>
-			<key>hash2</key>
-			<data>
-			4HkaMUjdfIeaQGy9FtZAYZ1Vuusr5u45FVMKsy7y5z8=
-			</data>
-		</dict>
 		<key>Windows/LIBUSB.4DX</key>
 		<dict>
 			<key>hash</key>
 			<data>
-			7enUM1q1YgPSYwztEsPDePNPaOU=
+			yg3VUi2CS/GmDGjGzseB7EjWRsw=
 			</data>
 			<key>hash2</key>
 			<data>
-			Wttoa/Z8Aro9dLw6oYozYWSNs7ep1T2RPKUbRQjfjmE=
-			</data>
-		</dict>
-		<key>Windows/libusb-1.0.dll</key>
-		<dict>
-			<key>hash</key>
-			<data>
-			dY961zGogytAoZXuIGWgX6tpkSE=
-			</data>
-			<key>hash2</key>
-			<data>
-			s/JBlL/vAug71BRzOZCPwS/3MiC3aOrUCVrzfs/Pd+I=
+			e/AZNZoC3uNe5U2+QzkQRvJtuEoB4C+4+IMWLYorWQQ=
 			</data>
 		</dict>
 		<key>Windows64/LIBUSB.4DX</key>
 		<dict>
 			<key>hash</key>
 			<data>
-			r3JEJCOcARFk4LymuYmPuVUGGs0=
+			gGpGBbFVINUNKotfMC9rAmL5R/k=
 			</data>
 			<key>hash2</key>
 			<data>
-			avse0bC4NUa7nCt8YCzZ0Fbr8lB44eAsr+/suo7BhJM=
+			jCYW99lbLJ8Sd92s97oBHU2fxIs/Nn9SYBkVXcyjKJU=
 			</data>
 		</dict>
-		<key>Windows64/libusb-1.0.dll</key>
+		<key>manifest.json</key>
 		<dict>
-			<key>hash</key>
+			<key>cdhash</key>
 			<data>
-			DaumE6rmqK0h1AAZpXMMrPdupPc=
+			5nrid7PaGZzVtBchVBP/WgJ1nyA=
 			</data>
-			<key>hash2</key>
-			<data>
-			wlWk90IUAlP45h+gFUD+Ryl1nIey3wRfl8Ao1KO2/SM=
-			</data>
+			<key>requirement</key>
+			<string>identifier manifest and anchor apple generic and certificate 1[field.1.2.840.113635.100.6.2.6] /* exists */ and certificate leaf[field.1.2.840.113635.100.6.1.13] /* exists */ and certificate leaf[subject.OU] = Y69CWUC25B</string>
 		</dict>
 	</dict>
 	<key>rules</key>

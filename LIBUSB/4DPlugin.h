@@ -16,6 +16,10 @@
 #include <Rpc.h> //UuidCreate
 #endif
 
+#define CALLBACK_IN_NEW_PROCESS 0
+#define CALLBACK_SLEEP_TIME 59
+#include <mutex>
+
 // --- USB
 void USB_SET_HOTPLUG_METHOD(sLONG_PTR *pResult, PackagePtr pParams);
 void USB_Get_hotplug_method(sLONG_PTR *pResult, PackagePtr pParams);

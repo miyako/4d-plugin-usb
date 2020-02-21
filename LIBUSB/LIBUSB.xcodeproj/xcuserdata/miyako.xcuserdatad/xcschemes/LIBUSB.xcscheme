@@ -42,7 +42,7 @@
       allowLocationSimulation = "YES">
       <PathRunnable
          runnableDebuggingMode = "0"
-         FilePath = "/Applications/4D/14.4-189212/4D v14.4/4D.app">
+         FilePath = "/Applications/4D v18/248534/4D.app">
       </PathRunnable>
       <MacroExpansion>
          <BuildableReference
