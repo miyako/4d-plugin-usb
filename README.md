@@ -65,7 +65,7 @@ $methodName:=USB Get hotplug method ($usb_error)
 
 Two local processes named ```$USB``` and ```$USB_HOTPLUG``` are launched.
 
-It will call libusb for 0.1 seconds, then sleep for 0.9 seconds. If a device is conneced or disconnected, the callback method will be executed in a new process ({name:Generate UUID). The method will receive 3 parameters; type of event, vendor id and product id.
+It will call libusb for 0.1 seconds, then sleep for 0.9 seconds. If a device is conneced or disconnected, the callback method will be executed in a new process (name:Generate UUID). The method will receive 3 parameters; type of event, vendor id and product id.
 
 * Example callback method
 
