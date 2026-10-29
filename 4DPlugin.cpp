@@ -38,7 +38,8 @@ namespace LIBUSB
     //context management
     bool LIBUSB_IS_READY = FALSE;
     bool LIBUSB_HOTPLUG_IS_READY = FALSE;
-    std::vector<ctx>userInfos;
+    std::vector<ctx>userInfos;  /* events queued by hotplug_callback */
+    std::vector<ctx>readyInfos; /* events handed to a callback process, one entry per dispatched process */
 
     //callback management
     C_TEXT LISTENER_METHOD;
@@ -190,6 +191,15 @@ static int LIBUSB_CALL hotplug_callback(libusb_context *ctx, libusb_device *dev,
             LIBUSB::userInfos.push_back(userInfo);
         }
 
+        /* FIX: nothing ever set PROCESS_SHOULD_RESUME while monitoring (listenerLoopExecute was never called),
+         so queued events were only dispatched at shutdown and userInfos grew without bound */
+        if(1)
+        {
+            std::lock_guard<std::mutex> lock(globalMutex4);
+
+            LIBUSB::PROCESS_SHOULD_RESUME = true;
+        }
+
     }
     return 0;
 }
@@ -211,32 +221,56 @@ void listenerLoop() {
     while(!PA_IsProcessDying())
     {
         PA_YieldAbsolute();
-        
+
         bool PROCESS_SHOULD_RESUME;
         bool PROCESS_SHOULD_TERMINATE;
-        
+
+        /* FIX: the flags were read without their mutexes;
+         RESUME is consumed (reset) *before* draining, so an event queued while draining is not lost */
         if(1)
         {
+            std::lock_guard<std::mutex> lock(globalMutex4);
+
             PROCESS_SHOULD_RESUME = LIBUSB::PROCESS_SHOULD_RESUME;
+            LIBUSB::PROCESS_SHOULD_RESUME = false;
+        }
+
+        if(1)
+        {
+            std::lock_guard<std::mutex> lock(globalMutex3);
+
             PROCESS_SHOULD_TERMINATE = LIBUSB::PROCESS_SHOULD_TERMINATE;
         }
-        
-        
+
+        if (PROCESS_SHOULD_TERMINATE)
+            break;
+
         if(PROCESS_SHOULD_RESUME)
         {
-            size_t userInfos;
-            
-            if(1)
-            {
-                std::lock_guard<std::mutex> lock(globalMutex);
-                
-                userInfos = LIBUSB::userInfos.size();
-            }
-            
-            while(userInfos)
+            while(true)
             {
                 PA_YieldAbsolute();
-                
+
+                /* FIX: move exactly one event from userInfos to readyInfos per dispatch.
+                 previously the queue size was re-read before the spawned process had popped its item,
+                 so the loop spawned extra processes that then dereferenced an empty vector */
+                bool hasEvent = false;
+
+                if(1)
+                {
+                    std::lock_guard<std::mutex> lock(globalMutex);
+
+                    if(!LIBUSB::userInfos.empty())
+                    {
+                        LIBUSB::readyInfos.push_back(LIBUSB::userInfos.front());
+                        LIBUSB::userInfos.erase(LIBUSB::userInfos.begin());
+                        hasEvent = true;
+                    }
+                }
+
+                if(!hasEvent)
+                    break;
+
                 if(CALLBACK_IN_NEW_PROCESS)
                 {
                     C_TEXT processName;
@@ -248,46 +282,41 @@ void listenerLoop() {
                 {
                     listenerLoopExecuteMethod();
                 }
-                
-                if (PROCESS_SHOULD_TERMINATE)
-                    break;
-                
+
                 if(1)
                 {
-                    std::lock_guard<std::mutex> lock(globalMutex);
-                    
-                    userInfos = LIBUSB::userInfos.size();
+                    std::lock_guard<std::mutex> lock(globalMutex3);
+
                     PROCESS_SHOULD_TERMINATE = LIBUSB::PROCESS_SHOULD_TERMINATE;
                 }
+
+                if (PROCESS_SHOULD_TERMINATE)
+                    break;
             }
-            
-            if(1)
-            {
-                std::lock_guard<std::mutex> lock(globalMutex4);
-                
-                LIBUSB::PROCESS_SHOULD_RESUME = false;
-            }
-            
+
         }else
         {
             /* DELAY PROCESS does not work for PA_NewProcess */
             PA_PutProcessToSleep(currentProcessNumber, CALLBACK_SLEEP_TIME);
         }
-            
+
         if(1)
         {
+            std::lock_guard<std::mutex> lock(globalMutex3);
+
             PROCESS_SHOULD_TERMINATE = LIBUSB::PROCESS_SHOULD_TERMINATE;
         }
-        
+
         if (PROCESS_SHOULD_TERMINATE)
             break;
     }
-    
+
     if(1)
     {
         std::lock_guard<std::mutex> lock(globalMutex);
-        
+
         LIBUSB::userInfos.clear();
+        LIBUSB::readyInfos.clear();
     }
     
     if(1)
@@ -312,7 +341,24 @@ void listenerLoopStart() {
     if(!LIBUSB::METHOD_PROCESS_ID)
     {
         std::lock_guard<std::mutex> lock(globalMutex1);
-        
+
+        /* FIX: reset the flags before either process starts.
+         after a previous stop, TERMINATE was still true and $USB could read it before
+         listenerLoop reset it, making the server quit immediately */
+        if(1)
+        {
+            std::lock_guard<std::mutex> lock3(globalMutex3);
+
+            LIBUSB::PROCESS_SHOULD_TERMINATE = false;
+        }
+
+        if(1)
+        {
+            std::lock_guard<std::mutex> lock4(globalMutex4);
+
+            LIBUSB::PROCESS_SHOULD_RESUME = false;
+        }
+
         LIBUSB::METHOD_PROCESS_ID = PA_NewProcess((void *)listenerLoop,
                                                        LIBUSB::STACK_SIZE,
                                                        LIBUSB::PROCESS_NAME);
@@ -328,8 +374,8 @@ void listenerLoopStart() {
         {
             std::lock_guard<std::mutex> lock(globalMutex);
             
-            LIBUSB::ArrivedEventCallbackHandle = NULL;
-            LIBUSB::DetachedEventCallbackHandle = NULL;
+            LIBUSB::ArrivedEventCallbackHandle = 0;
+            LIBUSB::DetachedEventCallbackHandle = 0;
             
             if(LIBUSB_SUCCESS == libusb_hotplug_register_callback(LIBUSB::HOTPLUG_CONTEXT,
                                                                   (libusb_hotplug_event)LIBUSB_HOTPLUG_EVENT_DEVICE_ARRIVED,
@@ -379,10 +425,18 @@ void listenerLoopFinish() {
         }
         
         //uninstall handler
+        /* FIX: the ARRIVED callback was never deregistered, so every stop/start cycle
+         added one more ARRIVED registration and duplicated arrival events */
+        if(LIBUSB::ArrivedEventCallbackHandle){
+            libusb_hotplug_deregister_callback(LIBUSB::HOTPLUG_CONTEXT, LIBUSB::ArrivedEventCallbackHandle);
+            printf("libusb_hotplug_deregister_callback\n");
+            LIBUSB::ArrivedEventCallbackHandle = 0;
+        }
+
         if(LIBUSB::DetachedEventCallbackHandle){
             libusb_hotplug_deregister_callback(LIBUSB::HOTPLUG_CONTEXT, LIBUSB::DetachedEventCallbackHandle);
             printf("libusb_hotplug_deregister_callback\n");
-            LIBUSB::DetachedEventCallbackHandle = NULL;
+            LIBUSB::DetachedEventCallbackHandle = 0;
         }
     }
 }
@@ -409,20 +463,34 @@ void listenerLoopExecuteMethod() {
     
     LIBUSB::ctx userInfo;
 
+    /* FIX: never dereference begin() of an empty queue */
     if(1)
     {
         std::lock_guard<std::mutex> lock(globalMutex);
 
-        std::vector<LIBUSB::ctx>::iterator p;
-        
-        p = LIBUSB::userInfos.begin();
-        
-        userInfo = *p;
-        
-        LIBUSB::userInfos.erase(p);
+        if(LIBUSB::readyInfos.empty())
+            return;
+
+        userInfo = LIBUSB::readyInfos.front();
+
+        LIBUSB::readyInfos.erase(LIBUSB::readyInfos.begin());
     }
-    
-    method_id_t methodId = PA_GetMethodID((PA_Unichar *)LIBUSB::LISTENER_METHOD.getUTF16StringPtr());
+
+    /* FIX: take a private copy of the method name under its mutex */
+    C_TEXT listenerMethod;
+
+    if(1)
+    {
+        std::lock_guard<std::mutex> lock(globalMutex2);
+
+        listenerMethod.setUTF16String(LIBUSB::LISTENER_METHOD.getUTF16StringPtr(),
+                                      LIBUSB::LISTENER_METHOD.getUTF16Length());
+    }
+
+    if(!listenerMethod.getUTF16Length())
+        return;
+
+    method_id_t methodId = PA_GetMethodID((PA_Unichar *)listenerMethod.getUTF16StringPtr());
     
     if(methodId)
     {
@@ -453,7 +521,7 @@ void listenerLoopExecuteMethod() {
         PA_SetLongintVariable(&params[3], userInfo.product);
                 
         params[0] = PA_CreateVariable(eVK_Unistring);
-        PA_Unistring method = PA_CreateUnistring((PA_Unichar *)LIBUSB::LISTENER_METHOD.getUTF16StringPtr());
+        PA_Unistring method = PA_CreateUnistring((PA_Unichar *)listenerMethod.getUTF16StringPtr());
         PA_SetStringVariable(&params[0], &method);
         
         /* execute method */
@@ -486,9 +554,9 @@ void listenerLoopServer() {
         
         PA_YieldAbsolute();
         
-        int LISTENER_METHOD_COMPLETED;
-        
-        if(0 > libusb_handle_events_timeout_completed(LIBUSB::HOTPLUG_CONTEXT, &tv, &LISTENER_METHOD_COMPLETED)){
+        /* FIX: the completion flag was an uninitialized int; libusb reads *completed and
+         skips event handling entirely when it is non-zero. there is no transfer to wait for here, so pass NULL */
+        if(0 > libusb_handle_events_timeout_completed(LIBUSB::HOTPLUG_CONTEXT, &tv, NULL)){
             break;
         }
         
@@ -516,6 +584,20 @@ void listenerLoopServer() {
 std::map<uint32_t, LIBUSB_DEVICE_HANDLE> LIBUSB_DEVICE_HANDLES;
 std::map<uint32_t, LIBUSB_DEVICE> LIBUSB_DEVICES;
 
+/* FIX: handle references are now erased on close (see close_device_handle).
+ allocate them from a monotonically increasing counter so that a closed reference
+ is not immediately recycled for a different device */
+static uint32_t nextDeviceHandleRef = 1;
+
+static uint32_t new_device_handle_ref(){
+    uint32_t deviceHandleRef = nextDeviceHandleRef;
+    while ((deviceHandleRef == 0) || (LIBUSB_DEVICE_HANDLES.find(deviceHandleRef) != LIBUSB_DEVICE_HANDLES.end())) {
+        deviceHandleRef++;
+    }
+    nextDeviceHandleRef = deviceHandleRef + 1;
+    return deviceHandleRef;
+}
+
 libusb_device *get_device(C_LONGINT &param, C_LONGINT &error){
     uint32_t deviceRef = param.getIntValue();
     libusb_device *device = NULL;
@@ -535,7 +617,11 @@ libusb_device_handle *get_device_handle(C_LONGINT &param, C_LONGINT &error){
     auto i = LIBUSB_DEVICE_HANDLES.find(deviceHandleRef);
     if(i != LIBUSB_DEVICE_HANDLES.end()){
 		LIBUSB_DEVICE_HANDLE h = i->second;
-        deviceHandle = h.deviceHandle;
+        if(h.isOpen){
+            deviceHandle = h.deviceHandle;
+        }else{
+            error.setIntValue(LIBUSB_ERROR_NO_DEVICE);
+        }
 	}else{
         error.setIntValue(LIBUSB_ERROR_NO_DEVICE);
     }
@@ -609,6 +695,9 @@ void claim_interface(C_LONGINT &param_1, C_LONGINT &param_2, C_LONGINT &error){
                     i->second.claimedInterfaces.push_back(interfaceNumber);
                 }
                 error.setIntValue(libusb_error);
+        }else{
+            /* FIX: already claimed through this handle; was reported as LIBUSB_ERROR_NO_DEVICE */
+            error.setIntValue(LIBUSB_SUCCESS);
         }
     }
 }
@@ -630,6 +719,10 @@ void release_interface(C_LONGINT &param_1, C_LONGINT &param_2, C_LONGINT &error)
                 i->second.claimedInterfaces.erase(j);
             }
             error.setIntValue(libusb_error);
+        }else{
+            /* FIX: not claimed through this handle; was reported as LIBUSB_ERROR_NO_DEVICE.
+             LIBUSB_ERROR_NOT_FOUND is what libusb_release_interface itself returns in that case */
+            error.setIntValue(LIBUSB_ERROR_NOT_FOUND);
         }
     }
 }
@@ -641,10 +734,7 @@ uint32_t open_device(C_LONGINT &param, C_LONGINT &error){
         libusb_device_handle *deviceHandle;
         int libusb_error = libusb_open(device, &deviceHandle);
         if(libusb_error == LIBUSB_SUCCESS){
-            deviceHandleRef = 1;
-            while (LIBUSB_DEVICE_HANDLES.find(deviceHandleRef) != LIBUSB_DEVICE_HANDLES.end()) {
-                deviceHandleRef++;
-            }
+            deviceHandleRef = new_device_handle_ref();
             LIBUSB_DEVICE_HANDLE h;
             usb_device_interfaces claimedInterfaces;
             h.device = device;
@@ -664,10 +754,7 @@ uint32_t open_device_with_vid_pid(C_LONGINT &vid, C_LONGINT &pid, C_LONGINT &err
     uint32_t deviceHandleRef = 0;
     libusb_device_handle *deviceHandle = libusb_open_device_with_vid_pid(NULL, vid.getIntValue(), pid.getIntValue());
     if(deviceHandle){
-        deviceHandleRef = 1;
-        while (LIBUSB_DEVICE_HANDLES.find(deviceHandleRef) != LIBUSB_DEVICE_HANDLES.end()) {
-            deviceHandleRef++;
-        }
+        deviceHandleRef = new_device_handle_ref();
         LIBUSB_DEVICE_HANDLE h;
         usb_device_interfaces claimedInterfaces;
         h.device = libusb_get_device(deviceHandle);
@@ -676,8 +763,12 @@ uint32_t open_device_with_vid_pid(C_LONGINT &vid, C_LONGINT &pid, C_LONGINT &err
         h.isOpen = true;
         LIBUSB_DEVICE_HANDLES.insert(std::map<uint32_t, LIBUSB_DEVICE_HANDLE>::value_type(deviceHandleRef, h));
         printf("libusb_open: handle %i\n", deviceHandleRef);
+    }else{
+        /* FIX: failure was reported as LIBUSB_SUCCESS with a 0 handle.
+         libusb_open_device_with_vid_pid returns NULL both when no device matches and when opening fails */
+        error.setIntValue(LIBUSB_ERROR_NOT_FOUND);
     }
-    
+
     return deviceHandleRef;
 }
 
@@ -700,59 +791,72 @@ void close_device_handle(C_LONGINT &param){
             libusb_close(i->second.deviceHandle);
             printf("libusb_close: handle %i\n", deviceHandleRef);
         }
+        /* FIX: the entry used to stay in the map holding the freed libusb_device_handle pointer,
+         so any later command with this reference passed freed memory to libusb */
+        LIBUSB_DEVICE_HANDLES.erase(i);
 	}
 }
 
-void close_all_device_handles(){
-    
+/* releases the cached device list without touching open handles
+ (an open handle holds its own reference on its libusb_device) */
+static void free_device_list(){
+
+    LIBUSB_DEVICES.clear();
+
+    std::lock_guard<std::mutex> lock(globalMutex_LIBUSB_DEVICE_LIST);
+
     if(LIBUSB::LIBUSB_DEVICE_LIST){
-        
-        for(auto i = LIBUSB_DEVICE_HANDLES.begin(); i != LIBUSB_DEVICE_HANDLES.end(); ++i){
-            uint32_t deviceHandleRef = i->first;
-            //should release all claimed interfaces before closing a device handle
-            for(auto j = i->second.claimedInterfaces.begin(); j != i->second.claimedInterfaces.end(); ++j){
-                int interfaceNumber = *j;
-                if(LIBUSB_SUCCESS == libusb_release_interface(i->second.deviceHandle, interfaceNumber)){
-                    printf("libusb_release_interface: %i of %i\n", interfaceNumber, deviceHandleRef);
-                }
-            }
-            i->second.claimedInterfaces.clear();
-            if(i->second.isOpen){
-                i->second.isOpen = false;
-                libusb_close(i->second.deviceHandle);
-                printf("libusb_close: handle %i\n", deviceHandleRef);
-            }
-        }
-        
-        LIBUSB_DEVICE_HANDLES.clear();
-        LIBUSB_DEVICES.clear();
-        
-        if(1)
-        {
-            std::lock_guard<std::mutex> lock(globalMutex_LIBUSB_DEVICE_LIST);
-            
-            libusb_free_device_list(LIBUSB::LIBUSB_DEVICE_LIST, 1);
-            printf("libusb_free_device_list\n");
-            
-            LIBUSB::LIBUSB_DEVICE_LIST = NULL;
-        }
+        libusb_free_device_list(LIBUSB::LIBUSB_DEVICE_LIST, 1);
+        printf("libusb_free_device_list\n");
+        LIBUSB::LIBUSB_DEVICE_LIST = NULL;
     }
 }
 
+void close_all_device_handles(){
+
+    /* FIX: handles used to be closed only when a device list existed,
+     so handles opened with USB Open device with vid pid were never closed (not even at exit) */
+    for(auto i = LIBUSB_DEVICE_HANDLES.begin(); i != LIBUSB_DEVICE_HANDLES.end(); ++i){
+        uint32_t deviceHandleRef = i->first;
+        //should release all claimed interfaces before closing a device handle
+        for(auto j = i->second.claimedInterfaces.begin(); j != i->second.claimedInterfaces.end(); ++j){
+            int interfaceNumber = *j;
+            if(LIBUSB_SUCCESS == libusb_release_interface(i->second.deviceHandle, interfaceNumber)){
+                printf("libusb_release_interface: %i of %i\n", interfaceNumber, deviceHandleRef);
+            }
+        }
+        i->second.claimedInterfaces.clear();
+        if(i->second.isOpen){
+            i->second.isOpen = false;
+            libusb_close(i->second.deviceHandle);
+            printf("libusb_close: handle %i\n", deviceHandleRef);
+        }
+    }
+
+    LIBUSB_DEVICE_HANDLES.clear();
+
+    free_device_list();
+}
+
 uint32_t get_device_list(C_LONGINT &error){
-    
-    uint32_t cnt;
-    
+
+    /* FIX: a previous list was overwritten (leaked) when this was called without close_all_device_handles */
+    free_device_list();
+
+    /* FIX: libusb_get_device_list returns ssize_t; a negative error code stored in uint32_t
+     became a huge count and the loop dereferenced the NULL list */
+    ssize_t cnt;
+
     if(1)
     {
         std::lock_guard<std::mutex> lock(globalMutex_LIBUSB_DEVICE_LIST);
-        
+
         cnt = libusb_get_device_list(NULL, &LIBUSB::LIBUSB_DEVICE_LIST);
     }
-    
+
     if(cnt > 0){
         printf("libusb_get_device_list\n");
-        for(int i = 0; i < cnt; ++i){
+        for(ssize_t i = 0; i < cnt; ++i){
             struct libusb_device_descriptor desc;
             libusb_device *device = LIBUSB::LIBUSB_DEVICE_LIST[i];
             if(LIBUSB_SUCCESS == libusb_get_device_descriptor(device, &desc)){
@@ -760,44 +864,35 @@ uint32_t get_device_list(C_LONGINT &error){
                 d.device = device;
                 d.vid = desc.idVendor;
                 d.pid = desc.idProduct;
-                d.deviceRef = i + 1;
-                LIBUSB_DEVICES.insert(std::map<uint32_t, LIBUSB_DEVICE>::value_type(i + 1, d));
+                d.deviceRef = (uint32_t)(i + 1);
+                LIBUSB_DEVICES.insert(std::map<uint32_t, LIBUSB_DEVICE>::value_type((uint32_t)(i + 1), d));
             }
         }
     }else{
-        error.setIntValue(cnt);
+        error.setIntValue((int)cnt);
         return 0;
     }
-    
-    return LIBUSB_DEVICES.size();
+
+    return (uint32_t)LIBUSB_DEVICES.size();
 }
 
 uint16_t get_max_packet_size(libusb_device *device, uint8_t endpoint){
-    uint16_t wMaxPacketSize = 0;
-    struct libusb_config_descriptor *config;
-    if(LIBUSB_SUCCESS == libusb_get_active_config_descriptor(device, &config)){
-        for(int i = 0; i < config->bNumInterfaces; ++i){
-            const libusb_interface *interface = &config->interface[i];
-            for(int j = 0; j < interface->num_altsetting; ++j){
-                const libusb_interface_descriptor *interface_descriptor = &interface->altsetting[j];
-                for(int k = 0; k < interface_descriptor->bNumEndpoints; ++k){
-                    const libusb_endpoint_descriptor *endpoint_descriptor = &interface_descriptor->endpoint[k];
-                    if(endpoint_descriptor->bEndpointAddress){
-                        wMaxPacketSize = endpoint_descriptor->wMaxPacketSize;
-                        break;
-                    }
-                }
-            }
-        }
+    /* FIX: the hand-written loop ignored the endpoint argument (it returned the size of the last
+     non-zero endpoint address it saw) and never called libusb_free_config_descriptor (leak per IN transfer).
+     libusb_get_max_packet_size looks up this exact endpoint in the active configuration and frees the descriptor.
+     bits 11-12 of wMaxPacketSize encode additional high-bandwidth transactions, not size: mask them off */
+    int size = libusb_get_max_packet_size(device, endpoint);
+    if(size <= 0){
+        return 0;
     }
-    return wMaxPacketSize;
+    return (uint16_t)(size & 0x07FF);
 }
 
 #pragma mark -
 
 void jsonAddIntProperty(CUTF8String &property, const char* name, int value){
-    char buf[11];
-    sprintf(buf, "%u", (int)value);
+    char buf[12];
+    snprintf(buf, sizeof(buf), "%d", value);
     property += (const uint8_t *)"\"";
     property += (const uint8_t *)name;
     property += (const uint8_t *)"\"";
@@ -822,36 +917,162 @@ usb_enpoint_t get_endpoint_type(int endpoint){
     return endpoint_type;
 }
 
-void libusb_transfer_cb(struct libusb_transfer *transfer){
-    user_data_t *user_data = (user_data_t *)transfer->user_data;
-    user_data->status = transfer->status;
-    
-    usb_enpoint_t endpointType = get_endpoint_type(transfer->endpoint);
-    
-    switch (transfer->status){
-        case LIBUSB_TRANSFER_COMPLETED:
-            switch (endpointType) {
-              case USB_ENDPOINT_IN:
-                user_data->data->setBytes(transfer->buffer, transfer->actual_length);
-                break;
-              default:
-                break;
-            }
-            break;
-        default:
-            //do nothing
-            break;
-    }
-    libusb_free_transfer(transfer);
+/*
+ FIX: the previous implementation submitted an asynchronous transfer, called
+ libusb_handle_events_timeout_completed(NULL, &tv, NULL) exactly once, and returned.
+ that call can return before the transfer has finished (another event, timeout 0, an error,
+ or a race with the transfer's own timeout), after which the callback wrote into a destroyed
+ stack frame and libusb wrote into a freed buffer. a transfer that failed to submit was never freed.
+
+ perform_transfer() below waits until libusb has handed the transfer back, exactly like
+ libusb's own synchronous API (sync_transfer_wait_for_completion in sync.c), and frees it itself.
+ the 4D-visible contract (status = libusb_transfer_status, error = libusb_error) is unchanged.
+ */
+
+static void LIBUSB_CALL transfer_done_cb(struct libusb_transfer *transfer){
+    int *completed = (int *)transfer->user_data;
+    *completed = 1;
 }
 
-int usb_transfer(int timeout){
-    struct timeval tv;
-    tv.tv_sec = 0;
-    tv.tv_usec = timeout * 1000;
-    int libusb_error = libusb_handle_events_timeout_completed(NULL, &tv, NULL);
-    printf("libusb_handle_events_timeout_completed: %s\n", libusb_error_name(libusb_error));
-    return libusb_error;
+static int perform_transfer(libusb_device_handle *deviceHandle,
+                            unsigned char endpoint,
+                            unsigned char transferType,
+                            unsigned char *buffer,
+                            int length,
+                            unsigned int timeout,
+                            int *status,
+                            int *actualLength){
+
+    *status = LIBUSB_TRANSFER_ERROR;
+    *actualLength = 0;
+
+    libusb_transfer *transfer = libusb_alloc_transfer(0);
+    if(!transfer){
+        return LIBUSB_ERROR_NO_MEM;
+    }
+
+    int completed = 0;
+
+    if(transferType == LIBUSB_TRANSFER_TYPE_INTERRUPT){
+        libusb_fill_interrupt_transfer(transfer, deviceHandle, endpoint, buffer, length,
+                                       transfer_done_cb, &completed, timeout);
+    }else{
+        libusb_fill_bulk_transfer(transfer, deviceHandle, endpoint, buffer, length,
+                                  transfer_done_cb, &completed, timeout);
+    }
+
+    int libusb_error = libusb_submit_transfer(transfer);
+
+    if(libusb_error != LIBUSB_SUCCESS){
+        /* the callback is never invoked for a transfer that failed to submit */
+        libusb_free_transfer(transfer);
+        return libusb_error;
+    }
+
+    while(!completed){
+        int r = libusb_handle_events_completed(NULL, &completed);
+        if(r < 0){
+            if(r == LIBUSB_ERROR_INTERRUPTED)
+                continue;
+            /* keep waiting: the callback will still fire, with LIBUSB_TRANSFER_CANCELLED */
+            libusb_cancel_transfer(transfer);
+            continue;
+        }
+        if(transfer->dev_handle == NULL){
+            /* transfer completion after libusb_close() */
+            transfer->status = LIBUSB_TRANSFER_NO_DEVICE;
+            completed = 1;
+        }
+    }
+
+    *status = transfer->status;
+    *actualLength = transfer->actual_length;
+
+    libusb_free_transfer(transfer);
+
+    return LIBUSB_SUCCESS;
+}
+
+static void usb_transfer_command(PackagePtr pParams, unsigned char transferType){
+
+    C_LONGINT Param1;
+    C_LONGINT Param2;
+    C_BLOB Param3;
+    C_LONGINT Param4;
+    C_LONGINT Param5;
+    C_LONGINT Param6;
+
+    Param1.fromParamAtIndex(pParams, 1);
+    Param2.fromParamAtIndex(pParams, 2);
+    Param3.fromParamAtIndex(pParams, 3);
+    Param4.fromParamAtIndex(pParams, 4);
+
+    if(LIBUSB::LIBUSB_IS_READY){
+        libusb_device_handle *deviceHandle = get_device_handle(Param1, Param6);
+        if(deviceHandle){
+
+            unsigned char endpoint = (unsigned char)Param2.getIntValue();
+            int requestedTimeout = Param4.getIntValue();
+
+            if(requestedTimeout < 0){
+                /* FIX: a negative 4D value used to become a ~49-day unsigned timeout */
+                Param6.setIntValue(LIBUSB_ERROR_INVALID_PARAM);
+            }else{
+
+                unsigned int timeout = (unsigned int)requestedTimeout;
+                bool isIn = (get_endpoint_type(endpoint) == USB_ENDPOINT_IN);
+
+                std::vector<unsigned char>buf;
+                unsigned char *buffer = NULL;
+                int length = 0;
+                int libusb_error = LIBUSB_SUCCESS;
+
+                if(isIn){
+                    length = get_max_packet_size(libusb_get_device(deviceHandle), endpoint);
+                    if(length > 0){
+                        buf.resize(length);
+                        buffer = buf.data();
+                    }else{
+                        /* FIX: the endpoint is not in the active configuration;
+                         previously &buf[0] was taken on an empty vector */
+                        libusb_error = LIBUSB_ERROR_NOT_FOUND;
+                    }
+                }else{
+                    length = (int)Param3.getBytesLength();
+                    buffer = (unsigned char *)Param3.getBytesPtr();
+                }
+
+                if(libusb_error == LIBUSB_SUCCESS){
+
+                    int status = LIBUSB_TRANSFER_ERROR;
+                    int actualLength = 0;
+
+                    libusb_error = perform_transfer(deviceHandle, endpoint, transferType,
+                                                    buffer, length, timeout,
+                                                    &status, &actualLength);
+
+                    printf("perform_transfer: endpoint %i of handle %i, %s, %s\n",
+                           endpoint,
+                           Param1.getIntValue(),
+                           libusb_error_name(libusb_error),
+                           libusb_error_name(status));
+
+                    if(libusb_error == LIBUSB_SUCCESS){
+                        Param5.setIntValue(status);
+                        if(isIn && (status == LIBUSB_TRANSFER_COMPLETED)){
+                            Param3.setBytes((const uint8_t *)buf.data(), actualLength);
+                        }
+                    }
+                }
+
+                Param6.setIntValue(libusb_error);
+            }
+        }
+    }
+
+    Param3.toParamAtIndex(pParams, 3);
+    Param5.toParamAtIndex(pParams, 5);
+    Param6.toParamAtIndex(pParams, 6);
 }
 
 #pragma mark Main
@@ -1005,9 +1226,14 @@ void USB_SET_HOTPLUG_METHOD(sLONG_PTR *pResult, PackagePtr pParams)
 	Param1.fromParamAtIndex(pParams, 1);
 
     if(LIBUSB::LIBUSB_HOTPLUG_IS_READY){
-        Param1.fromParamAtIndex(pParams, 1);
-        LIBUSB::LISTENER_METHOD.setUTF16String(Param1.getUTF16StringPtr(), Param1.getUTF16Length());
-        
+        /* FIX: LISTENER_METHOD is shared with the listener processes; write it under its mutex */
+        if(1)
+        {
+            std::lock_guard<std::mutex> lock(globalMutex2);
+
+            LIBUSB::LISTENER_METHOD.setUTF16String(Param1.getUTF16StringPtr(), Param1.getUTF16Length());
+        }
+
         if(Param1.getUTF16Length()){
             PA_RunInMainProcess((PA_RunInMainProcessProcPtr)listenerLoopStart, NULL);
         }else{
@@ -1027,11 +1253,15 @@ void USB_Get_hotplug_method(sLONG_PTR *pResult, PackagePtr pParams)
 	C_TEXT returnValue;
 
     if(LIBUSB::LIBUSB_HOTPLUG_IS_READY){
-        LIBUSB::LISTENER_METHOD.setReturn(pResult);
+        /* FIX: copy under the mutex instead of returning the shared object directly */
+        std::lock_guard<std::mutex> lock(globalMutex2);
+
+        returnValue.setUTF16String(LIBUSB::LISTENER_METHOD.getUTF16StringPtr(),
+                                   LIBUSB::LISTENER_METHOD.getUTF16Length());
     }else{
         Param1.setIntValue(LIBUSB_ERROR_OTHER);
-        returnValue.setReturn(pResult);
     }
+    returnValue.setReturn(pResult);
 	Param1.toParamAtIndex(pParams, 1);
 }
 
@@ -1381,26 +1611,28 @@ void USB_Get_device(sLONG_PTR *pResult, PackagePtr pParams)
                 //e.g. if open_with_vid_pid was used
                 get_device_list(Param2);
             }
+            /* FIX: PA_YieldAbsolute() inside these loops let another process clear LIBUSB_DEVICES
+             mid-iteration (invalidated iterator). the fallback also called close_all_device_handles(),
+             which closed this very handle before libusb_get_device(deviceHandle) was called on it again.
+             the open handle keeps its libusb_device referenced, so the list can be refreshed
+             without closing anything */
             libusb_device *device = libusb_get_device(deviceHandle);
             for(auto i = LIBUSB_DEVICES.begin(); i != LIBUSB_DEVICES.end(); ++i){
-                PA_YieldAbsolute();
                 if(i->second.device == device){
                     returnValue.setIntValue(i->first);
                     break;
                 }
             }
             if(!returnValue.getIntValue()){
-                close_all_device_handles();
-                get_device_list(Param2);
-                device = libusb_get_device(deviceHandle);
-                for(auto i = LIBUSB_DEVICES.begin(); i != LIBUSB_DEVICES.end(); ++i){
-                    PA_YieldAbsolute();
-                    if(i->second.device == device){
-                        returnValue.setIntValue(i->first);
-                        break;
+                if(get_device_list(Param2)){
+                    for(auto i = LIBUSB_DEVICES.begin(); i != LIBUSB_DEVICES.end(); ++i){
+                        if(i->second.device == device){
+                            returnValue.setIntValue(i->first);
+                            break;
+                        }
                     }
                 }
-            }            
+            }
         }
     }
 
@@ -1589,9 +1821,12 @@ void USB_GET_DESCRIPTOR(sLONG_PTR *pResult, PackagePtr pParams)
             uint8_t desc_type = (uint8_t)Param2.getIntValue();
             uint8_t desc_index = (uint8_t)Param3.getIntValue();
             std::vector<unsigned char>buf(DESCRIPTOR_BUFFER_SIZE);
-            int size = libusb_get_descriptor(deviceHandle, desc_type, desc_index, &buf[0], DESCRIPTOR_BUFFER_SIZE);
+            int size = libusb_get_descriptor(deviceHandle, desc_type, desc_index, buf.data(), DESCRIPTOR_BUFFER_SIZE);
             if(size > 0){
-                Param4.setBytes((const uint8_t *)&buf[0], size);
+                Param4.setBytes((const uint8_t *)buf.data(), size);
+            }else if(size < 0){
+                /* FIX: a failed control transfer used to leave the error at LIBUSB_SUCCESS */
+                Param5.setIntValue(size);
             }
         }
     }
@@ -1604,173 +1839,10 @@ void USB_GET_DESCRIPTOR(sLONG_PTR *pResult, PackagePtr pParams)
 
 void USB_INTERRUPT_TRANSFER(sLONG_PTR *pResult, PackagePtr pParams)
 {
-	C_LONGINT Param1;
-	C_LONGINT Param2;
-	C_BLOB Param3;
-	C_LONGINT Param4;
-	C_LONGINT Param5;
-	C_LONGINT Param6;
-    
-	Param1.fromParamAtIndex(pParams, 1);
-	Param2.fromParamAtIndex(pParams, 2);
-	Param3.fromParamAtIndex(pParams, 3);
-	Param4.fromParamAtIndex(pParams, 4);
-
-    if(LIBUSB::LIBUSB_IS_READY){
-        libusb_device_handle *deviceHandle = get_device_handle(Param1, Param6);
-        if(deviceHandle){
-        
-            libusb_device *device = libusb_get_device(deviceHandle);
-            unsigned char endpoint = Param2.getIntValue();
-            unsigned int timeout = Param4.getIntValue();
-            int libusb_error;
-            
-            user_data_t user_data;
-            user_data.data = &Param3;
-            user_data.status = 0;
-            int length = 0;
-            std::vector<unsigned char>buf(0);
-            unsigned char *buffer = NULL;
-            libusb_transfer *transfer = NULL;
-            usb_enpoint_t endpointType = get_endpoint_type(endpoint);
-            
-            switch (endpointType){
-                case USB_ENDPOINT_IN:
-                    length = get_max_packet_size(device, endpoint);
-                    buf.resize(length);
-                    buffer = &buf[0];
-                    transfer = libusb_alloc_transfer(0);
-                    break;
-                case USB_ENDPOINT_OUT:
-                    length = Param3.getBytesLength();
-                    buffer = (unsigned char *)Param3.getBytesPtr();
-                    transfer = libusb_alloc_transfer(0);
-                    break;
-                default:
-                    break;
-            }
-            
-            if(endpointType != USB_ENDPOINT_UNKNOWN){
-                libusb_fill_interrupt_transfer(
-                        transfer,
-                        deviceHandle,
-                        endpoint,
-                        buffer,
-                        length,
-                        (libusb_transfer_cb_fn)libusb_transfer_cb,
-                        &user_data,
-                        timeout);
-                
-                libusb_error = libusb_submit_transfer(transfer);
-                printf("libusb_submit_transfer: endpoint %i of handle %i, %s\n",
-                endpoint,
-                Param1.getIntValue(),
-                libusb_error_name(libusb_error));
-                
-                if(libusb_error == LIBUSB_SUCCESS){
-                    //the application will block anyway, why bother...
-                    //blocking
-                    libusb_error = usb_transfer(timeout);
-                    printf("usb_transfer: %s\n",
-                        libusb_error_name(libusb_error));
-                    
-                    if(libusb_error == LIBUSB_SUCCESS){
-                        Param5.setIntValue(user_data.status);
-                    }
-                }
-                Param6.setIntValue(libusb_error);
-            }
-        }
-    }
-
-	Param3.toParamAtIndex(pParams, 3);
-	Param5.toParamAtIndex(pParams, 5);
-	Param6.toParamAtIndex(pParams, 6);
+    usb_transfer_command(pParams, LIBUSB_TRANSFER_TYPE_INTERRUPT);
 }
-
 
 void USB_BULK_TRANSFER(sLONG_PTR *pResult, PackagePtr pParams)
 {
-	C_LONGINT Param1;
-	C_LONGINT Param2;
-	C_BLOB Param3;
-	C_LONGINT Param4;
-	C_LONGINT Param5;
-	C_LONGINT Param6;
-    
-	Param1.fromParamAtIndex(pParams, 1);
-	Param2.fromParamAtIndex(pParams, 2);
-	Param3.fromParamAtIndex(pParams, 3);
-	Param4.fromParamAtIndex(pParams, 4);
-
-    if(LIBUSB::LIBUSB_IS_READY){
-        libusb_device_handle *deviceHandle = get_device_handle(Param1, Param6);
-        if(deviceHandle){
-        
-            libusb_device *device = libusb_get_device(deviceHandle);
-            unsigned char endpoint = Param2.getIntValue();
-            unsigned int timeout = Param4.getIntValue();
-            int libusb_error;
-            
-            user_data_t user_data;
-            user_data.data = &Param3;
-            user_data.status = 0;
-            int length = 0;
-            std::vector<unsigned char>buf(0);
-            unsigned char *buffer = NULL;
-            libusb_transfer *transfer = NULL;
-            usb_enpoint_t endpointType = get_endpoint_type(endpoint);
-            
-            switch (endpointType){
-                case USB_ENDPOINT_IN:
-                    length = get_max_packet_size(device, endpoint);
-                    buf.resize(length);
-                    buffer = &buf[0];
-                    transfer = libusb_alloc_transfer(0);
-                    break;
-                case USB_ENDPOINT_OUT:
-                    length = Param3.getBytesLength();
-                    buffer = (unsigned char *)Param3.getBytesPtr();
-                    transfer = libusb_alloc_transfer(0);
-                    break;
-                default:
-                    break;
-            }
-            
-            if(endpointType != USB_ENDPOINT_UNKNOWN){
-                libusb_fill_bulk_transfer(
-                        transfer,
-                        deviceHandle,
-                        endpoint,
-                        buffer,
-                        length,
-                        (libusb_transfer_cb_fn)libusb_transfer_cb,
-                        &user_data,
-                        timeout);
-                
-                libusb_error = libusb_submit_transfer(transfer);
-                printf("libusb_submit_transfer: endpoint %i of handle %i, %s\n",
-                endpoint,
-                Param1.getIntValue(),
-                libusb_error_name(libusb_error));
-                
-                if(libusb_error == LIBUSB_SUCCESS){
-                    //the application will block anyway, why bother...
-                    //blocking
-                    libusb_error = usb_transfer(timeout);
-                    printf("usb_transfer: %s\n",
-                        libusb_error_name(libusb_error));
-                    
-                    if(libusb_error == LIBUSB_SUCCESS){
-                        Param5.setIntValue(user_data.status);
-                    }
-                }
-                Param6.setIntValue(libusb_error);
-            }
-        }
-    }
-
-	Param3.toParamAtIndex(pParams, 3);
-	Param5.toParamAtIndex(pParams, 5);
-	Param6.toParamAtIndex(pParams, 6);
+    usb_transfer_command(pParams, LIBUSB_TRANSFER_TYPE_BULK);
 }
