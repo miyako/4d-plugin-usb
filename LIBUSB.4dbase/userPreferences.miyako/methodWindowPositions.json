@@ -1,0 +1,50 @@
+{
+	"Sources/Methods/Method1.4dm": {
+		"left": 48,
+		"top": 299,
+		"width": 902,
+		"height": 532
+	},
+	"Sources/Methods/LIBUSB_Get_product.4dm": {
+		"left": 158,
+		"top": 123,
+		"width": 884,
+		"height": 617
+	},
+	"Sources/Methods/Method2.4dm": {
+		"left": 599,
+		"top": 188,
+		"width": 1135,
+		"height": 690
+	},
+	"Sources/Methods/HOTPLUG_CB.4dm": {
+		"left": -73,
+		"top": 325,
+		"width": 902,
+		"height": 585
+	},
+	"Sources/Methods/LIBUSB_GET_INTERFACES.4dm": {
+		"left": 567,
+		"top": 148,
+		"width": 884,
+		"height": 617
+	},
+	"Sources/Methods/TRANSFER_CB.4dm": {
+		"left": 235,
+		"top": 107,
+		"width": 949,
+		"height": 563
+	},
+	"Sources/Methods/LIBUSB_Get_direction.4dm": {
+		"left": 364,
+		"top": 167,
+		"width": 902,
+		"height": 558
+	},
+	"Sources/DatabaseMethods/onStartup.4dm": {
+		"left": -86,
+		"top": 337,
+		"width": 902,
+		"height": 558
+	}
+}

@@ -1,0 +1,74 @@
+{
+	"Sources/Methods/Method1.4dm": {
+		"startSelection": 7,
+		"endSelection": 7,
+		"firstSelectedLine": 12,
+		"lastSelectedLine": 12,
+		"folding": [],
+		"bookmarks": [],
+		"stamp": "2026-10-29T03:12:27.399Z"
+	},
+	"Sources/Methods/LIBUSB_Get_product.4dm": {
+		"startSelection": 30,
+		"endSelection": 0,
+		"firstSelectedLine": 7,
+		"lastSelectedLine": 6,
+		"folding": [],
+		"bookmarks": [],
+		"stamp": "2026-10-29T03:12:27.400Z"
+	},
+	"Sources/Methods/Method2.4dm": {
+		"startSelection": 0,
+		"endSelection": 8,
+		"firstSelectedLine": 0,
+		"lastSelectedLine": 46,
+		"folding": [],
+		"bookmarks": [],
+		"stamp": "2026-10-29T03:12:27.400Z"
+	},
+	"Sources/Methods/HOTPLUG_CB.4dm": {
+		"startSelection": 0,
+		"endSelection": 0,
+		"firstSelectedLine": 0,
+		"lastSelectedLine": 0,
+		"folding": [],
+		"bookmarks": [],
+		"stamp": "2026-10-29T03:12:27.401Z"
+	},
+	"Sources/Methods/LIBUSB_GET_INTERFACES.4dm": {
+		"startSelection": 84,
+		"endSelection": 84,
+		"firstSelectedLine": 10,
+		"lastSelectedLine": 10,
+		"folding": [],
+		"bookmarks": [],
+		"stamp": "2026-10-29T03:12:27.401Z"
+	},
+	"Sources/Methods/TRANSFER_CB.4dm": {
+		"startSelection": 5,
+		"endSelection": 5,
+		"firstSelectedLine": 0,
+		"lastSelectedLine": 0,
+		"folding": [],
+		"bookmarks": [],
+		"stamp": "2026-10-29T03:12:27.401Z"
+	},
+	"Sources/Methods/LIBUSB_Get_direction.4dm": {
+		"startSelection": 13,
+		"endSelection": 13,
+		"firstSelectedLine": 11,
+		"lastSelectedLine": 11,
+		"folding": [],
+		"bookmarks": [],
+		"stamp": "2026-10-29T03:12:27.401Z"
+	},
+	"Sources/DatabaseMethods/onStartup.4dm": {
+		"startSelection": 0,
+		"endSelection": 48,
+		"firstSelectedLine": 1,
+		"lastSelectedLine": 1,
+		"folding": [],
+		"bookmarks": [],
+		"stamp": "2026-10-29T03:12:27.402Z"
+	}
+}
