@@ -172,3 +172,12 @@ I could also claim the Super Drive, but only if connected via a USB hub that doe
 Feedback on real devices are welcome...
 
 **Note**: For prerequisites on Windows see https://github.com/libusb/libusb/wiki/Windows.
+
+# Maintenance workflows
+
+Independent manual **Bump version** (patch/minor/major, source-only) and
+zero-input **Build** use the selected immutable commit. Build preserves the
+macOS Default universal build and prebuilt Windows payload; it never
+automatically follows Bump. Existing versions cannot be republished.
+See [.github/README.md](.github/README.md) for version authority, release safety,
+manual recovery and offline validation.
