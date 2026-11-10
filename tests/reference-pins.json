@@ -1,0 +1,43 @@
+{
+  "intake": "11b24c7e0c794c7d732f4d0da62131323a800072",
+  "coordinated_policy": "3b30725b94ddcce9f242bdb9d9c9e48dc61b22d1",
+  "latest_example": {
+    "repository": "miyako/4d-plugin-screen-capture",
+    "commit": "699dfb7e118669e76531184df9730a6569dd56ad"
+  },
+  "references": {
+    "miyako/4d-plugin-native-encoding-detection": "c42ca565857f674bde5ea6ed3435c87375eda4a7",
+    "miyako/4d-plugin-file-information": "19848973601acfd3a2b5070230fa40cdc7e4edb2",
+    "miyako/4d-plugin-common-string-algorithm": "2606a68201866ec9fcbb38b51462d79215f504ef",
+    "miyako/4d-plugin-window-button": "3f14facb9aaaaff0e22eeb8e07531163680c3a8a",
+    "miyako/4d-plugin-raw-picture-data": "8144537fdc8dcc3d0c053dfe97aff0a8c0c3a6f9",
+    "miyako/4d-plugin-PRNG": "522f62e1e9f388be0f3f226c1d4c39362dad2491",
+    "miyako/4d-plugin-get-file-description": "0e6dad397e015c3c7ec61d7dfeb9c60bc6a4a22b",
+    "miyako/4d-plugin-maddy": "e000f17a5ad5085dcd010a9ddde76a4cb2d3119b",
+    "miyako/4d-plugin-keychain": "7aedc6ba4633e53f5055c1b83c68a6dd32d9c85a",
+    "miyako/4d-plugin-window-style": "2794dbe06717b8344a99fc14991a7a2b5d6ef196",
+    "miyako/4d-plugin-shell-execute-v2": "ee33f21111d9a042101ccc11d68672a7a0067e9c",
+    "miyako/4d-plugin-serial": "32f33a3b3de7dd5201b215ff6050dd3d68e03936",
+    "miyako/4d-plugin-UTI": "5decf4be07f8297d256dfb559ef9466525fe9045",
+    "miyako/4d-plugin-RTF2TEXT": "4a8c89677515cd5c71c162e0b296e63bee374cdd",
+    "miyako/4d-plugin-libarchive": "9547d09522fc422ddd754fb088165b3d1d1d3073",
+    "miyako/4d-plugin-stomp": "ab9f5e51dba5b8b6ec1a1b70e191082fcb73fb41"
+  },
+  "adapted_raw_blobs": {
+    "shell-execute-v2/.github/scripts/bump.py": "5c8e51af859ef599266640b1dbd39c89d282b838",
+    "shell-execute-v2/.github/hooks/pre-push": "e06e50d2b33972ce25ca3611e97b1395062ae81a",
+    "shell-execute-v2/.github/migration-hooks/pre-push": "8ab7329fa6182fb841d9288fc9d09a77469f6610",
+    "shell-execute-v2/.github/scripts/source_version.py": "0aa992ddf1e5478505688dc8199e03dd9122b1b1",
+    "shell-execute-v2/.github/scripts/native.sh": "a239895041996775c090623cbe2c4697c33ba6b8",
+    "shell-execute-v2/.github/workflows/release.yml": "70aeaf2efc7fd7c76083722e8319db7f48a01220",
+    "shell-execute-v2/tests/test_bump.py": "310d7f33db71be805f71b1bd1b17a4a49cc103bb",
+    "stomp/.github/scripts/repository.py": "e7f92c2a8875337c038a719b601e538c9bc70864",
+    "libarchive/.github/scripts/repository.py": "ba3a0bd1b7831c68a59cbd147bd1501f1c004fc2",
+    "stomp/tests/test_release.py": "b15a566d64b30493a00ce43ba13516139163b71d",
+    "RTF2TEXT/.github/scripts/native.py": "92f758057cbce3ffebfd5470e082ef60c8ea822d",
+    "RTF2TEXT/.github/scripts/release.py": "d9e70426b97cca10a607be026cb398c04c78949d",
+    "RTF2TEXT/tests/test_release.py": "3c7ff46ff3fb9d2e1b932e1b7c0ea2c89df32492",
+    "serial/.github/scripts/native.py": "8b9b05bdd3c63540e3160f9cc6a6240424a09a84",
+    "UTI/tests/test_release.py": "758edad0d70a3f4f1d2b5b98a7acead00f72cdac"
+  }
+}
