@@ -27,7 +27,6 @@ case "$1" in
       ARCHS="arm64 x86_64" \
       ONLY_ACTIVE_ARCH=NO \
       MACOSX_DEPLOYMENT_TARGET="$MACOS_DEPLOYMENT_TARGET" \
-      CODE_SIGNING_ALLOWED=NO \
       CONFIGURATION_BUILD_DIR="$PWD/$BASE_DIR/Plugins" \
       build
     ;;

@@ -42,9 +42,10 @@ if tool in ("python", "python3"):
     else:
         os.execv(sys.executable, [sys.executable, *args])
 elif tool == "xcodebuild":
+    assert not any(arg.startswith("CODE_SIGNING_ALLOWED=") for arg in args)
     assert args == ["-project", "LIBUSB.xcodeproj", "-target", "LIBUSB",
                     "-configuration", "Default", "ARCHS=arm64 x86_64", "ONLY_ACTIVE_ARCH=NO",
-                    "MACOSX_DEPLOYMENT_TARGET=11.0", "CODE_SIGNING_ALLOWED=NO",
+                    "MACOSX_DEPLOYMENT_TARGET=11.0",
                     "CONFIGURATION_BUILD_DIR=" + str(pathlib.Path.cwd() / "LIBUSB.4dbase/Plugins"), "build"]
     assert (contents / "Windows64/LIBUSB.4DX").read_bytes() == b"prebuilt-windows"
     for relative in ("MacOS/LIBUSB", "Info.plist", "Resources/manifest.json",

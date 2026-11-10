@@ -61,9 +61,16 @@ and IOKit/Security/Cocoa/CoreGraphics/AppKit framework policy is unchanged.
 `dylib/libusb-1.0.0.dylib` is not packaged; no runtime dependency policy,
 nested dependency-clone exceptions or 4D execution is added.
 
-The existing credential/altool project phase is unchanged and runs only for
-Deployment. Selected Default leaves it inactive; `CODE_SIGNING_ALLOWED=NO`
-only disables ordinary Xcode signing, not custom phases.
+The user explicitly approved correcting the output directory while preserving
+original Xcode signing behavior on 2026-11-10. The invocation-only
+`CONFIGURATION_BUILD_DIR="$PWD/$BASE_DIR/Plugins"` sends fresh Default output
+to the canonical packaged bundle instead of a configuration subdirectory.
+There is no `CODE_SIGNING_ALLOWED` override: the original empty
+`CODE_SIGN_IDENTITY`, manual signing style and team project settings remain
+unchanged. The existing credential/altool project phase is unchanged and runs
+only for Deployment; selected Default leaves it inactive. The subsequent
+explicit Developer ID codesign, strict verification and notarization sequence
+is retained.
 
 Cleanup prevalidates every target before the first deletion. Only exact
 generated macOS leaves and proven project intermediates are removed; never
