@@ -503,7 +503,11 @@ void listenerLoopExecuteMethod() {
         PA_SetLongintVariable(&params[1], userInfo.vendor);
         PA_SetLongintVariable(&params[2], userInfo.product);
                 
-        PA_ExecuteMethodByID(methodId, params, 3);
+        /* the returned value is owned by the caller; only valid when the call succeeded */
+        PA_Variable result = PA_ExecuteMethodByID(methodId, params, 3);
+        PA_ErrorCode err = PA_GetLastError();
+        if(err == eER_NoErr)
+            PA_ClearVariable(&result);
         
         PA_ClearVariable(&params[0]);
         PA_ClearVariable(&params[1]);
@@ -520,7 +524,8 @@ void listenerLoopExecuteMethod() {
         PA_SetLongintVariable(&params[2], userInfo.vendor);
         PA_SetLongintVariable(&params[3], userInfo.product);
                 
-        params[0] = PA_CreateVariable(eVK_Unistring);
+        /* PA_SetStringVariable is a shallow set: an eVK_Unistring variable would orphan its empty string */
+        params[0] = PA_CreateVariable(eVK_Undefined);
         PA_Unistring method = PA_CreateUnistring((PA_Unichar *)listenerMethod.getUTF16StringPtr());
         PA_SetStringVariable(&params[0], &method);
         
