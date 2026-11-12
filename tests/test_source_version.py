@@ -369,4 +369,9 @@ class SourceVersionTests(Fixture):
             "manifest.json", "constants.json", "constants.xlf",
             "LIBUSB.vcxproj", "LIBUSB.sln", "LIBUSB.zip", "LIBUSB.dmg",
         ], cwd=ROOT)
-        self.assertEqual(diff, b"")
+        # C_PICTURE.cpp carries the ownership fix from miyako/4d-plugin-lha@16bf1198 (exact blob).
+        picture = b"4D Plugin API/Classes/C_PICTURE.cpp"
+        self.assertEqual(diff.replace(picture + b"\n", b""), b"")
+        if picture in diff:
+            blob = subprocess.check_output(["git", "hash-object", picture.decode()], cwd=ROOT).strip()
+            self.assertEqual(blob, b"676d01860dcf42180ce31d749ddd6ee0255e5bec")
